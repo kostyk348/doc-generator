@@ -1,9 +1,8 @@
 import { DocumentData } from '../types';
 import { buildStampSvg, renderStampToCanvasPng } from './stampUtils';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import JsBarcode from 'jsbarcode';
+// html2canvas/jspdf/jsbarcode импортируются динамически внутри функций ниже —
+// нужны только при формировании .eml, не при каждом открытии страницы.
 import { buildUpcA12Digits } from '../components/DocumentBarcode';
 
 const transliterateToLatin = (str: string): string => {
@@ -262,13 +261,14 @@ export const convertImageUrlToPngBase64 = (
 /**
  * Renders document barcode to PNG Base64 string for embedding into EML MIME messages
  */
-export const renderBarcodeToCanvasPng = (
+export const renderBarcodeToCanvasPng = async (
   date: string,
   refNumber: string,
   id?: string
-): string | null => {
+): Promise<string | null> => {
   if (typeof document === 'undefined') return null;
   try {
+    const JsBarcode = (await import('jsbarcode')).default;
     const canvas = document.createElement('canvas');
     const upcCodeValue = buildUpcA12Digits(date, refNumber, id);
     JsBarcode(canvas, upcCodeValue, {
@@ -564,6 +564,9 @@ export const generateDocumentPdfBase64 = async (
       return null;
     }
 
+    const html2canvas = (await import('html2canvas')).default;
+    const { jsPDF } = await import('jspdf');
+
     // Capture A4 preview element into canvas
     const canvas = await html2canvas(el, {
       scale: 2,
@@ -700,7 +703,7 @@ export const generateEmlFileContentAsync = async (
 
   // 3.5. Process Barcode Image
   if (data.showBarcode !== false) {
-    const barcodePngDataUrl = renderBarcodeToCanvasPng(data.date, data.refNumber, data.id);
+    const barcodePngDataUrl = await renderBarcodeToCanvasPng(data.date, data.refNumber, data.id);
     if (barcodePngDataUrl && barcodePngDataUrl.startsWith('data:image/png;base64,')) {
       const base64 = barcodePngDataUrl.split(',')[1];
       if (base64) {
