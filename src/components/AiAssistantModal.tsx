@@ -83,8 +83,8 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
               <Sparkles className="w-4 h-4 text-amber-300" />
             </div>
             <div>
-              <h3 className="text-xs font-bold uppercase tracking-wider">ИИ-Помощник делового стиля</h3>
-              <p className="text-[11px] text-slate-500">Генерация и улучшение текста официальных бланков</p>
+              <h3 className="text-xs font-bold uppercase tracking-wider">Мастер формулировок делового стиля</h3>
+              <p className="text-[11px] text-slate-500">Автономный генератор формулировок официальных бланков</p>
             </div>
           </div>
           <button

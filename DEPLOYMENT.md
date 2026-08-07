@@ -29,7 +29,6 @@
    ```env
    NODE_ENV=production
    PORT=3000
-   GEMINI_API_KEY=your_gemini_api_key_here
    ALLOWED_ORIGIN=*
    ```
 

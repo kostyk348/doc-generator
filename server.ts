@@ -1,7 +1,6 @@
 import express, { Router } from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
-import { GoogleGenAI } from '@google/genai';
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
@@ -28,14 +27,14 @@ apiRouter.get('/v1/health', (req, res) => {
     status: 'ok',
     service: 'generator-doc-gost',
     version: '1.0.0',
+    mode: 'offline_intranet',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     capabilities: [
       'gost_document_generation',
       'auto_registration',
       'department_code_resolution',
-      'employee_database',
-      'ai_document_assistant'
+      'employee_database'
     ]
   });
 });
@@ -45,9 +44,10 @@ apiRouter.get('/v1/spec', (req, res) => {
     service: 'generator-doc-gost microservice',
     description: 'Микросервис автоматического генератора и реестра документов по ГОСТ АО НПО Тепломаш',
     version: '1.0.0',
+    mode: 'offline_intranet',
     endpoints: {
       'GET /api/v1/health': 'Проверка работоспособности сервиса',
-      'POST /api/ai-text': 'Генерация/редактирование текста документа через ИИ',
+      'POST /api/ai-text': 'Автономный генератор формулировок официального текста',
       'GET /api/v1/spec': 'Спецификация интеграционного контракта микросервиса'
     },
     microfrontend: {
@@ -57,48 +57,26 @@ apiRouter.get('/v1/spec', (req, res) => {
   });
 });
 
-// API endpoint for AI business document text generation
-apiRouter.post('/ai-text', async (req, res) => {
-  try {
-    const { prompt, currentContent, docType } = req.body;
-    
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      return res.status(400).json({ 
-        error: 'GEMINI_API_KEY is missing',
-        fallback: true 
-      });
-    }
+// Offline business document text formulation generator (no external API calls)
+apiRouter.post('/ai-text', (req, res) => {
+  const { prompt = '', docType = '' } = req.body;
+  const rawPrompt = prompt.toLowerCase();
 
-    const ai = new GoogleGenAI({ 
-      apiKey,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        }
-      }
-    });
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: `Вы — профессиональный корпоративный юрист и секретарь высшей категории.
-Напишите или отредактируйте текст для официального документа организации в соответствии со стандартами делового стиля и ГОСТ Р 7.0.97-2016.
-
-Вид документа: ${docType || 'Официальное письмо'}
-Задача от пользователя: ${prompt}
-Текущий контекст: ${currentContent || 'Нет'}
-
-Требования:
-- Верните только HTML-фрагмент с абзацами <p>Текст...</p> без лишних пояснений или блоков markdown.
-- Используйте вежливые официальные формулировки (например, "Довожу до Вашего сведения", "Прошу Вас рассмотреть", "Настоящим извещаем").
-- Текст должен быть структурированным, грамотным и готовым к распечатке.`
-    });
-
-    const generatedText = response.text || '';
-    res.json({ text: generatedText.replace(/```html/g, '').replace(/```/g, '').trim() });
-  } catch (error: any) {
-    console.error('AI Generation Error:', error);
-    res.status(500).json({ error: error.message || 'Server error', fallback: true });
+  let text = '';
+  if (rawPrompt.includes('закупк') || rawPrompt.includes('оборуд') || rawPrompt.includes('материал')) {
+    text = `<p>Настоящим доводят до Вашего сведения необходимость обновления материально-технической базы организации в связи с плановым расширением производственных мощностей.</p>
+<p>Просим Вас согласовать закупку специализированного оборудования и выделить необходимые финансовые средства согласно приложенной смете.</p>`;
+  } else if (rawPrompt.includes('отпуск') || rawPrompt.includes('заявлен')) {
+    text = `<p>Прошу предоставить мне ежегодный оплачиваемый отпуск продолжительностью 14 календарных дней в соответствии с утвержденным графиком отпусков.</p>`;
+  } else if (rawPrompt.includes('коммерческ') || rawPrompt.includes('предлож') || rawPrompt.includes('поставк')) {
+    text = `<p>Выражаем Вам свое уважение и направляем коммерческое предложение на поставку продукции производства АО «НПО «Тепломаш».</p>
+<p>Гарантируем высокое качество оборудования, соблюдение согласованных сроков отгрузки и предоставление полного комплекта технической документации.</p>`;
+  } else {
+    text = `<p>Довожу до Вашего сведения информацию касательно функционирования профильного подразделения организации. В рамках выполнения поставленных задач просим рассмотреть данные предложения по оптимизации процессов.</p>
+<p>Гарантируем соблюдение установленных сроков и стандартов качества при реализации вышеуказанных мероприятий.</p>`;
   }
+
+  res.json({ text });
 });
 
 // Mount API router under both /api and /docgen/api (supporting both stripped and non-stripped proxy setups)
