@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, Sparkles, Check, RefreshCw, Wand2 } from 'lucide-react';
+import { getApiBaseUrl } from '../config/microserviceConfig';
 
 interface AiAssistantModalProps {
   isOpen: boolean;
@@ -25,7 +26,7 @@ export const AiAssistantModal: React.FC<AiAssistantModalProps> = ({
   const handleGenerate = async () => {
     setIsGenerating(true);
     try {
-      const response = await fetch('/api/ai-text', {
+      const response = await fetch(`${getApiBaseUrl()}/ai-text`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

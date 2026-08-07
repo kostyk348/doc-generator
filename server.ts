@@ -1,17 +1,16 @@
-import express from 'express';
+import express, { Router } from 'express';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: '10mb' }));
 
 // Enable CORS for microservice cross-origin calls
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
   if (req.method === 'OPTIONS') {
@@ -20,8 +19,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Create API Router for microservice endpoints
+const apiRouter = Router();
+
 // MICROSERVICE REST API v1 ENDPOINTS
-app.get('/api/v1/health', (req, res) => {
+apiRouter.get('/v1/health', (req, res) => {
   res.json({
     status: 'ok',
     service: 'generator-doc-gost',
@@ -38,7 +40,7 @@ app.get('/api/v1/health', (req, res) => {
   });
 });
 
-app.get('/api/v1/spec', (req, res) => {
+apiRouter.get('/v1/spec', (req, res) => {
   res.json({
     service: 'generator-doc-gost microservice',
     description: 'Микросервис автоматического генератора и реестра документов по ГОСТ АО НПО Тепломаш',
@@ -49,14 +51,14 @@ app.get('/api/v1/spec', (req, res) => {
       'GET /api/v1/spec': 'Спецификация интеграционного контракта микросервиса'
     },
     microfrontend: {
-      postMessageEvents: ['INIT_DOCUMENT', 'GET_DOCUMENT', 'REGISTER_DOCUMENT', 'PING'],
-      emittedEvents: ['MICROSERVICE_READY', 'DOCUMENT_CHANGED', 'DOCUMENT_REGISTERED', 'PONG']
+      postMessageEvents: ['INIT_DOCUMENT', 'GET_DOCUMENT', 'REGISTER_DOCUMENT', 'PING', 'RETURN_TO_PORTAL'],
+      emittedEvents: ['MICROSERVICE_READY', 'DOCUMENT_CHANGED', 'DOCUMENT_REGISTERED', 'RETURN_TO_PORTAL', 'PONG']
     }
   });
 });
 
 // API endpoint for AI business document text generation
-app.post('/api/ai-text', async (req, res) => {
+apiRouter.post('/ai-text', async (req, res) => {
   try {
     const { prompt, currentContent, docType } = req.body;
     
@@ -99,6 +101,10 @@ app.post('/api/ai-text', async (req, res) => {
   }
 });
 
+// Mount API router under both /api and /docgen/api (supporting both stripped and non-stripped proxy setups)
+app.use('/api', apiRouter);
+app.use('/docgen/api', apiRouter);
+
 // Vite Middleware & Production static serving setup
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
@@ -109,14 +115,16 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
+    app.use('/docgen', express.static(distPath));
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    
+    app.get(['/docgen*', '*'], (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
   });
 }
 

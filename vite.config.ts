@@ -8,7 +8,7 @@ const rootDir = normalizePath(fileURLToPath(new URL('.', import.meta.url)));
 export default defineConfig(() => {
   return {
     root: rootDir,
-    base: './',
+    base: process.env.VITE_BASE_PATH || '/docgen/',
     plugins: [
       {
         name: 'decode-cyrillic-paths',
