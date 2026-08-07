@@ -63,7 +63,10 @@ export function usePortalAuth(requiredPermission: string = 'DOC_GENERATOR_ACCESS
           // portal-core is optional at local build time, fallback to standalone JWT/Portal gate check
         }
 
-        // 3. Check for active token or fallback local role session
+        // 3. Temporary mock fallback for UI/dev testing:
+        // ВНИМАНИЕ: Данная ветка является временной интерфейсной заглушкой (mock) для тестирования верстки и ролей в UI.
+        // Она не проверяет криптографическую подпись токена и не осуществляет валидацию на бэкенде.
+        // Будет заменена на полноценную проверку при интеграции с боевым portal-core / RBAC бэкендом tmdata.
         const storedRole = localStorage.getItem('doc_gen_user_role');
 
         if (activeToken || storedRole) {
