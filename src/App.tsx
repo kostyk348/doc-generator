@@ -214,10 +214,11 @@ export default function App() {
         type: 'RETURN_TO_PORTAL',
         payload: { action: 'close' }
       }, '*');
-    } else if (document.referrer) {
-      window.location.href = document.referrer;
     } else {
-      alert('Вы находитесь в автономном режиме микросервиса. Событие возврата RETURN_TO_PORTAL отправлено на родительский портал.');
+      // Открыто обычной ссылкой (не iframe) на том же origin, что и портал —
+      // document.referrer ненадёжен (пуст при обновлении страницы/переходе по
+      // закладке), портал всегда на корне этого же origin.
+      window.location.href = '/';
     }
   };
 
