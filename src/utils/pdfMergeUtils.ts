@@ -1,6 +1,7 @@
-import { PDFDocument } from 'pdf-lib';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+// pdf-lib/html2canvas/jspdf импортируются динамически внутри функций ниже —
+// это самые тяжёлые зависимости в бандле (~1.7 МБ несжатого JS суммарно),
+// нужны только когда пользователь реально жмёт экспорт/печать, не при каждом
+// открытии страницы.
 import { DocumentData } from '../types';
 
 const oklchCache = new Map<string, string>();
@@ -44,6 +45,9 @@ export async function generateMainDocumentPdfArrayBuffer(
     console.error('Element #document-a4-sheet not found in DOM');
     return null;
   }
+
+  const html2canvas = (await import('html2canvas')).default;
+  const { default: jsPDF } = await import('jspdf');
 
   const canvas = await html2canvas(el, {
     scale: 2,
@@ -135,6 +139,7 @@ export async function mergeMainPdfWithAttachments(
   mainPdfBuffer: ArrayBuffer,
   attachmentFiles: File[]
 ): Promise<Uint8Array> {
+  const { PDFDocument } = await import('pdf-lib');
   const mergedPdfDoc = await PDFDocument.create();
 
   // 1. Copy pages from the main document PDF

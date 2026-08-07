@@ -203,11 +203,11 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const bstr = evt.target?.result;
         if (!bstr) return;
-        const rawData = parseExcelOrCsv(bstr);
+        const rawData = await parseExcelOrCsv(bstr);
 
         if (rawData.length === 0) {
           setImportStatus({ type: 'error', message: 'Файл Excel пуст или не содержит данных.' });
@@ -333,7 +333,7 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
   };
 
   // Excel Export Handler
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     const exportData = employees.map(emp => ({
       'ФИО полностью': emp.fullName,
       'Инициалы (ФИО кратко)': emp.shortName,
@@ -346,11 +346,11 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
       'Телефон': emp.phone
     }));
 
-    exportToExcelFile(exportData, `База_Сотрудников_Тепломаш_${new Date().toISOString().slice(0,10)}.xlsx`, 'Сотрудники');
+    await exportToExcelFile(exportData, `База_Сотрудников_Тепломаш_${new Date().toISOString().slice(0,10)}.xlsx`, 'Сотрудники');
   };
 
   // Excel Template Download Handler
-  const handleDownloadTemplate = () => {
+  const handleDownloadTemplate = async () => {
     const sampleData = [
       {
         'ФИО полностью': 'Иванов Иван Иванович',
@@ -376,7 +376,7 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
       }
     ];
 
-    exportToExcelFile(sampleData, 'Шаблон_Загрузки_Сотрудников_Тепломаш.xlsx', 'Шаблон_Сотрудники');
+    await exportToExcelFile(sampleData, 'Шаблон_Загрузки_Сотрудников_Тепломаш.xlsx', 'Шаблон_Сотрудники');
   };
 
   return (

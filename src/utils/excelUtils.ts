@@ -1,4 +1,5 @@
-import * as XLSX from 'xlsx';
+// xlsx (SheetJS) импортируется динамически — ~860 КБ несжатого JS, нужен только
+// при реальном импорте/экспорте Excel-файла, не при каждом открытии страницы.
 
 export interface ExcelRowData {
   [key: string]: string | number | boolean;
@@ -7,8 +8,9 @@ export interface ExcelRowData {
 /**
  * Parses an Excel or CSV file buffer into an array of JSON objects
  */
-export const parseExcelOrCsv = (binaryData: string | ArrayBuffer): Record<string, unknown>[] => {
+export const parseExcelOrCsv = async (binaryData: string | ArrayBuffer): Promise<Record<string, unknown>[]> => {
   try {
+    const XLSX = await import('xlsx');
     const workbook = XLSX.read(binaryData, { type: 'binary' });
     const firstSheetName = workbook.SheetNames[0];
     if (!firstSheetName) return [];
@@ -39,11 +41,12 @@ export const parseExcelOrCsv = (binaryData: string | ArrayBuffer): Record<string
 /**
  * Exports data objects to an Excel (.xlsx) file
  */
-export const exportToExcelFile = (
-  data: Record<string, unknown>[], 
-  filename: string, 
+export const exportToExcelFile = async (
+  data: Record<string, unknown>[],
+  filename: string,
   sheetName = 'Сотрудники'
 ) => {
+  const XLSX = await import('xlsx');
   const worksheet = XLSX.utils.json_to_sheet(data);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
