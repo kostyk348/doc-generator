@@ -36,6 +36,9 @@ export default defineConfig(() => {
       include: ['xlsx', 'lucide-react', 'react', 'react-dom'],
     },
     build: {
+      rollupOptions: {
+        external: ['portal-core'],
+      },
       commonjsOptions: {
         include: [/xlsx/, /node_modules/],
         transformMixedEsModules: true,

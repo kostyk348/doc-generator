@@ -1,14 +1,16 @@
 # Инструкция по деплою и интеграции `generator-doc-gost` на портал tmdata (/docgen/)
 
-## 1. Архитектура и Базовый Путь (/docgen/)
+## 1. Архитектура и Прод-Сервер (tmdata@10.10.0.177)
 
-Микросервис настроен на работу по относительному адресу `/docgen/`:
-- **Vite Base Path**: `process.env.VITE_BASE_PATH` (по умолчанию `/docgen/`).
+Микросервис разворачивается на продуктовом сервере портала **tmdata@10.10.0.177**:
+- **Рабочий каталог на сервере**: `/home/tmdata/develop/frontend/doc-generator`
+- **Системный пользователь**: `tmdata`
+- **Vite Base Path**: `/docgen/` (задается в `vite.config.ts`)
 - **Express Backend (`server.ts`)**:
   - Слушает `PORT=3000` (по умолчанию).
-  - API эндпоинты смонтированы одновременно на `/api/` и `/docgen/api/` (поддерживает как `proxy_pass http://127.0.0.1:3000/`, так и без усечения).
-  - Статический клиент раздается Express по путям `/docgen` и `/` в production режиме.
-- **Фронтенд вызовы**: `getApiBaseUrl()` динамически вычисляет базовый префикс (например, `/docgen/api/ai-text`).
+  - API эндпоинты смонтированы под `/api/` и `/docgen/api/`.
+  - Статический клиент раздается Express по пути `/docgen`.
+- **Фронтенд вызовы**: `getApiBaseUrl()` динамически вычисляет префикс `/docgen/api`.
 
 ---
 
@@ -19,13 +21,13 @@
    sudo cp systemd/docgen.service /etc/systemd/system/docgen.service
    ```
 
-2. Создайте каталог для логов (если отсутствует):
+2. Создайте каталог для логов и установите владельца `tmdata:tmdata`:
    ```bash
    sudo mkdir -p /var/log/tmdata
-   sudo chown -R wms:wms /var/log/tmdata
+   sudo chown -R tmdata:tmdata /var/log/tmdata
    ```
 
-3. Создайте файл окружения `.env` в папке проекта `/home/wms/services/doc-generator/.env`:
+3. Создайте файл окружения `.env` в папке проекта `/home/tmdata/develop/frontend/doc-generator/.env`:
    ```env
    NODE_ENV=production
    PORT=3000
@@ -34,6 +36,7 @@
 
 4. Соберите проект и запустите сервис:
    ```bash
+   cd /home/tmdata/develop/frontend/doc-generator
    npm run build
    sudo systemctl daemon-reload
    sudo systemctl enable docgen
@@ -45,7 +48,7 @@
 
 ## 3. Настройка Nginx
 
-Вставьте следующий блок в файл `drf_catalog_service/systemd/nginx.conf` (или аналогичный конфигурационный файл портала):
+Вставьте следующий блок в файл `drf_catalog_service/systemd/nginx.conf` на сервере `10.10.0.177`:
 
 ```nginx
 location ^~ /docgen/ {
@@ -55,6 +58,10 @@ location ^~ /docgen/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_read_timeout 90s;
+    
+    # Защита на уровне Nginx
+    auth_basic "TMDATA Portal - Doc Generator Access";
+    auth_basic_user_file /etc/nginx/.htpasswd;
 }
 ```
 
@@ -65,15 +72,15 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ---
 
-## 4. Интеграция с Авторизацией Portal-Core (JWT)
+## 4. Защита доступа и Авторизация (Portal Auth Gate)
 
-Для ограничения доступа на стороне фронтенда:
-1. Установите `portal-core`:
-   ```bash
-   npm install portal-core@git+ssh://wms@10.10.0.165/home/wms/git-repos/tmdata/portal-core.git#master
-   ```
-2. В файле `src/App.tsx` подключите хук `useAuthGate` с правами доступа портала.
-3. Дополнительно Nginx может использовать HTTP Basic Auth (`auth_basic`) для блокировки неавторизованных прямых вызовов на уровень `/docgen/`.
+Приложение реализует двухуровневую защиту:
+1. **Уровень Proxy/Nginx**: Включен `auth_basic` через `/etc/nginx/.htpasswd`.
+2. **Уровень Фронтенда (`useAuthGate` / `PortalAuthGate`)**:
+   - Реализована проверка портальной JWT-сессии `portal_token` / `access_token` из cookie или `localStorage`.
+   - Поддерживает интеграцию с пакетом `portal-core` (`npm install portal-core@git+ssh://wms@10.10.0.165/home/wms/git-repos/tmdata/portal-core.git#master`).
+   - При отсутствии валидной сессии приложение блокирует генерацию документов и отображает шлюз авторизации портала.
+
 
 ---
 

@@ -4,14 +4,14 @@ After=network.target
 
 [Service]
 Type=simple
-User=wms
-WorkingDirectory=/home/wms/services/doc-generator
+User=tmdata
+WorkingDirectory=/home/tmdata/develop/frontend/doc-generator
 ExecStart=/usr/bin/node dist/server.cjs
 Restart=on-failure
 RestartSec=5s
 Environment=NODE_ENV=production
 Environment=PORT=3000
-EnvironmentFile=-/home/wms/services/doc-generator/.env
+EnvironmentFile=-/home/tmdata/develop/frontend/doc-generator/.env
 StandardOutput=append:/var/log/tmdata/docgen.log
 StandardError=append:/var/log/tmdata/docgen-error.log
 

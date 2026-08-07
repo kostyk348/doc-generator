@@ -12,6 +12,8 @@ import { TeplomashEmployeeSelectorModal } from './components/TeplomashEmployeeSe
 import { AuthModal } from './components/AuthModal';
 import { ExportModal } from './components/ExportModal';
 import { PrintModal } from './components/PrintModal';
+import { PortalAuthGate } from './components/PortalAuthGate';
+import { usePortalAuth } from './hooks/usePortalAuth';
 import { triggerSystemPrint } from './utils/printUtils';
 import { TeplomashEmployee, TEPLOMASH_EMPLOYEES, sanitizeEmployeeDepartments } from './constants/teplomashEmployees';
 import { SAMPLE_STAMPS } from './constants/presets';
@@ -63,6 +65,9 @@ const EMPLOYEES_KEY = 'teplomash_employees_db';
 const ROLE_KEY = 'doc_gen_user_role';
 
 export default function App() {
+  // Portal JWT Auth Gate Hook
+  const portalAuthState = usePortalAuth('DOC_GENERATOR_ACCESS');
+
   // Auth & User Role State
   const [userRole, setUserRole] = useState<'admin' | 'user' | null>(() => {
     const saved = localStorage.getItem(ROLE_KEY);
@@ -313,7 +318,8 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] flex flex-col font-sans antialiased text-slate-800 selection:bg-indigo-500 selection:text-white">
+    <PortalAuthGate authState={portalAuthState} onLogin={() => setIsAuthModalOpen(true)}>
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col font-sans antialiased text-slate-800 selection:bg-indigo-500 selection:text-white">
       {/* ================= HEADER NAVBAR (NO-PRINT) ================= */}
       <header className="no-print h-16 bg-white border-b border-slate-200 sticky top-0 z-40 px-6 flex items-center justify-between shrink-0">
         <div className="max-w-[1700px] w-full mx-auto flex items-center justify-between gap-4">
@@ -695,5 +701,6 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
         docData={docData}
       />
     </div>
+    </PortalAuthGate>
   );
 }
