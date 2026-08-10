@@ -19,32 +19,31 @@
 
 ## 2. Развертывание в systemd
 
-1. Скопируйте файл сервиса в системный каталог:
-   ```bash
-   sudo cp systemd/docgen.service /etc/systemd/system/docgen.service
-   ```
+`deploy_docgen.sh` делает всё сам — перенос каталога на `/opt/tmdata-frontend/docgen`
+(разово, идемпотентно), сборку, синхронизацию systemd-юнита (копирование в
+`/etc/systemd/system/`, `daemon-reload`, `enable`), рестарт сервиса. Вручную нужно
+только один раз завести секрет — `.env`, который сборкой/git не тащится:
 
-2. Создайте каталог для логов и установите владельца `tmdata:tmdata`:
-   ```bash
-   sudo mkdir -p /var/log/tmdata
-   sudo chown -R tmdata:tmdata /var/log/tmdata
-   ```
-
-3. Создайте файл окружения `.env` в папке проекта `/opt/tmdata-frontend/docgen/.env`:
+1. Создайте файл окружения `.env` в `/opt/tmdata-frontend/docgen/.env`
+   (или в старом каталоге, если ещё не переехали — скрипт при переносе заберёт его
+   вместе со всем остальным):
    ```env
    NODE_ENV=production
    PORT=3000
    ALLOWED_ORIGIN=*
    ```
 
-4. Соберите проект и запустите сервис:
+2. Создайте каталог для логов, если ещё не создан (тоже делает сам скрипт, но можно
+   и заранее):
    ```bash
-   cd /opt/tmdata-frontend/docgen
-   npm run build
-   sudo systemctl daemon-reload
-   sudo systemctl enable docgen
-   sudo systemctl start docgen
-   sudo systemctl status docgen
+   sudo mkdir -p /var/log/tmdata
+   sudo chown -R tmdata:tmdata /var/log/tmdata
+   ```
+
+3. Запустите (из старого каталога при самом первом разе, из нового — во всех
+   остальных):
+   ```bash
+   ./deploy_docgen.sh
    ```
 
 ---
