@@ -3,7 +3,10 @@
 ## 1. Архитектура и Прод-Сервер (tmdata@10.10.0.177)
 
 Микросервис разворачивается на продуктовом сервере портала **tmdata@10.10.0.177**:
-- **Рабочий каталог на сервере**: `/home/tmdata/develop/frontend/doc-generator`
+- **Рабочий каталог на сервере**: `/opt/tmdata-frontend/docgen` (перенесено сюда из
+  `/home/tmdata/develop/frontend/doc-generator` для единообразия с `filter-app-graphs`,
+  который живёт там же — `/opt/tmdata-frontend/graphs`; у docgen никогда не было риска
+  `rsync --delete` от backend-деплоя, он и раньше был вне `/opt/tmdata`)
 - **Системный пользователь**: `tmdata`
 - **Vite Base Path**: `/docgen/` (задается в `vite.config.ts`)
 - **Express Backend (`server.ts`)**:
@@ -27,7 +30,7 @@
    sudo chown -R tmdata:tmdata /var/log/tmdata
    ```
 
-3. Создайте файл окружения `.env` в папке проекта `/home/tmdata/develop/frontend/doc-generator/.env`:
+3. Создайте файл окружения `.env` в папке проекта `/opt/tmdata-frontend/docgen/.env`:
    ```env
    NODE_ENV=production
    PORT=3000
@@ -36,7 +39,7 @@
 
 4. Соберите проект и запустите сервис:
    ```bash
-   cd /home/tmdata/develop/frontend/doc-generator
+   cd /opt/tmdata-frontend/docgen
    npm run build
    sudo systemctl daemon-reload
    sudo systemctl enable docgen
@@ -58,12 +61,11 @@ location ^~ /docgen/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_read_timeout 90s;
-    
-    # Защита на уровне Nginx
-    auth_basic "TMDATA Portal - Doc Generator Access";
-    auth_basic_user_file /etc/nginx/.htpasswd;
 }
 ```
+
+Осознанно без `auth_basic` — своей проверки прав у сервиса пока нет, решили оставить
+`/docgen/` открытым до реальной интеграции с бэкендом tmdata/RBAC (см. раздел 4).
 
 Выполните перезагрузку конфигурации Nginx:
 ```bash
@@ -86,6 +88,6 @@ sudo nginx -t && sudo systemctl reload nginx
 ## 5. Пост-сообщения (PostMessage) и Возврат на Портал
 
 Микросервис поддерживает обмен сообщениями:
-- **`RETURN_TO_PORTAL`**: Кнопка «Вернуться на портал» отправляет событие `RETURN_TO_PORTAL` в родительское окно `window.parent.postMessage` и совершает навигацию назад на `document.referrer`.
+- **`RETURN_TO_PORTAL`**: Кнопка «Вернуться на портал» отправляет событие `RETURN_TO_PORTAL` в родительское окно через `window.parent.postMessage`, если встроено как iframe; иначе (текущий режим — обычная ссылка из шапки портала на том же origin) просто переходит на `/`.
 - **`INIT_DOCUMENT`**: Инициализация данных документа из 1С/Портала.
 - **`REGISTER_DOCUMENT`**: Запрос на авто-регистрацию документа в реестре.
