@@ -1,9 +1,11 @@
 import { DocumentData } from '../types';
 import { buildStampSvg, renderStampToCanvasPng } from './stampUtils';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
-// html2canvas/jspdf/jsbarcode импортируются динамически внутри функций ниже —
-// нужны только при формировании .eml, не при каждом открытии страницы.
 import { buildUpcA12Digits } from '../components/DocumentBarcode';
+// jsbarcode — статически, не lazy: DocumentBarcode.tsx (импортирован выше)
+// и так тянет его статическим import'ом, dynamic import() здесь ничего не
+// экономил (vite предупреждал про это при сборке), только усложнял код.
+import JsBarcode from 'jsbarcode';
 
 const transliterateToLatin = (str: string): string => {
   const map: Record<string, string> = {
@@ -268,7 +270,6 @@ export const renderBarcodeToCanvasPng = async (
 ): Promise<string | null> => {
   if (typeof document === 'undefined') return null;
   try {
-    const JsBarcode = (await import('jsbarcode')).default;
     const canvas = document.createElement('canvas');
     const upcCodeValue = buildUpcA12Digits(date, refNumber, id);
     JsBarcode(canvas, upcCodeValue, {
