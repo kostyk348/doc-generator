@@ -53,6 +53,26 @@ export const HeaderSettings: React.FC<HeaderSettingsProps> = ({
     }
   };
 
+  if (!isAdmin) {
+    return (
+      <div className="bg-slate-900 text-white border border-slate-700 rounded-xl p-5 text-xs leading-relaxed flex flex-col items-start gap-4 shadow-md">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-400/30 flex items-center justify-center shrink-0 text-amber-400 mt-0.5">
+            <Lock className="w-5 h-5" />
+          </div>
+          <div>
+            <span className="font-bold text-amber-300 uppercase tracking-wider block mb-1">
+              Настройка шапки бланка недоступна
+            </span>
+            <p className="text-slate-300 text-[11.5px] leading-relaxed">
+              Вам установлен официальный ГОСТ-бланк АО «НПО «Тепломаш». Управление шапкой и логотипом доступно исключительно Администратору.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Role Restriction Banner */}
@@ -74,17 +94,6 @@ export const HeaderSettings: React.FC<HeaderSettingsProps> = ({
               </p>
             </div>
           </div>
-
-          {onRequestAdminAuth && (
-            <button
-              type="button"
-              onClick={onRequestAdminAuth}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-xs shrink-0 transition-colors flex items-center gap-1.5 shadow-xs"
-            >
-              <KeyRound className="w-3.5 h-3.5 text-indigo-200" />
-              <span>Войти как Админ</span>
-            </button>
-          )}
         </div>
       ) : (
         <div className="bg-amber-50 border border-amber-200 rounded p-4 text-xs text-amber-900 leading-relaxed flex items-start gap-3">

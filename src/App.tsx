@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DocumentData, DocumentPreset } from './types';
-import { INITIAL_DOCUMENT } from './constants/presets';
-import { HeaderSettings } from './components/HeaderSettings';
+import { INITIAL_DOCUMENT, TEPLOMASH_OFFICIAL_HEADER_URL } from './constants/presets';
 import { DocumentForm } from './components/DocumentForm';
 import { SignatureSettings } from './components/SignatureSettings';
 import { StyleControls } from './components/StyleControls';
@@ -12,9 +11,12 @@ import { TeplomashEmployeeSelectorModal } from './components/TeplomashEmployeeSe
 import { AuthModal } from './components/AuthModal';
 import { ExportModal } from './components/ExportModal';
 import { PrintModal } from './components/PrintModal';
+import { RegistryModal } from './components/RegistryModal';
 import { PortalAuthGate } from './components/PortalAuthGate';
 import { usePortalAuth } from './hooks/usePortalAuth';
 import { triggerSystemPrint } from './utils/printUtils';
+import { validateDocument, ValidationError } from './utils/validationUtils';
+import { ValidationModal } from './components/ValidationModal';
 import { TeplomashEmployee, TEPLOMASH_EMPLOYEES, sanitizeEmployeeDepartments } from './constants/teplomashEmployees';
 import { SAMPLE_STAMPS } from './constants/presets';
 import { useMicroserviceBridge } from './hooks/useMicroserviceBridge';
@@ -29,7 +31,6 @@ import {
 import { 
   FileText, 
   Printer, 
-  Image as ImageIcon, 
   UserCheck, 
   PenTool, 
   Palette, 
@@ -89,14 +90,14 @@ export default function App() {
 
   const [employees, setEmployees] = useState<TeplomashEmployee[]>(() => {
     const saved = localStorage.getItem(EMPLOYEES_KEY);
-    if (saved) {
+    if (saved !== null) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return sanitizeEmployeeDepartments(parsed);
         }
       } catch {
-        return sanitizeEmployeeDepartments(TEPLOMASH_EMPLOYEES);
+        return [];
       }
     }
     return sanitizeEmployeeDepartments(TEPLOMASH_EMPLOYEES);
@@ -111,20 +112,31 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.header && parsed.header.imageUrl && parsed.header.imageUrl.includes('ООО%20«ВЕКТОР%20ИННОВАЦИЙ»')) {
-          parsed.header.imageUrl = INITIAL_DOCUMENT.header.imageUrl;
-        }
+        // Always enforce official locked Teplomash header and GOST R 7.0.97-2025 default margins
+        parsed.header = {
+          ...parsed.header,
+          type: 'preset',
+          imageUrl: TEPLOMASH_OFFICIAL_HEADER_URL
+        };
+        parsed.margins = {
+          top: 20,
+          bottom: 20,
+          left: 20,
+          right: 10
+        };
         return parsed;
       } catch { return INITIAL_DOCUMENT; }
     }
     return INITIAL_DOCUMENT;
   });
 
-  const [activeTab, setActiveTab] = useState<'header' | 'fields' | 'signature' | 'style'>('fields');
-  const [zoomLevel, setZoomLevel] = useState<number>(0.95);
+  const [activeTab, setActiveTab] = useState<'fields' | 'signature' | 'style'>('fields');
+  const isAdmin = userRole === 'admin';
+  const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [isTemplatesOpen, setIsTemplatesOpen] = useState<boolean>(false);
   const [isDraftsOpen, setIsDraftsOpen] = useState<boolean>(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState<boolean>(false);
+  const [isRegistryOpen, setIsRegistryOpen] = useState<boolean>(false);
   const [copiedNotification, setCopiedNotification] = useState<boolean>(false);
   const [savedNotification, setSavedNotification] = useState<boolean>(false);
 
@@ -170,8 +182,8 @@ export default function App() {
         senderOrganization: emp.organization,
         senderName: emp.shortName,
         senderEmail: emp.email,
-        showStamp: true,
-        stampImageUrl: stampSvg
+        showStamp: false,
+        stampImageUrl: null
       }
     }));
   };
@@ -267,21 +279,49 @@ export default function App() {
     });
   };
 
+  const [validationModalState, setValidationModalState] = useState<{
+    isOpen: boolean;
+    errors: ValidationError[];
+    actionName: string;
+  }>({ isOpen: false, errors: [], actionName: '' });
+
   const handleNewBlank = () => {
     const todayStr = new Date().toLocaleDateString('ru-RU');
     setDocData({
       ...INITIAL_DOCUMENT,
       id: `doc-${Date.now()}`,
       date: todayStr,
-      content: `<p>Текст официального обращения...</p>`,
+      content: ``,
       docType: 'СЛУЖЕБНАЯ ЗАПИСКА',
       docSubject: ''
     });
   };
 
   const handlePrint = () => {
+    const errs = validateDocument(docData);
+    if (errs.length > 0) {
+      setValidationModalState({
+        isOpen: true,
+        errors: errs,
+        actionName: 'печати документа'
+      });
+      return;
+    }
     triggerSystemPrint(docData);
     setIsPrintModalOpen(true);
+  };
+
+  const handleOpenExportModal = () => {
+    const errs = validateDocument(docData);
+    if (errs.length > 0) {
+      setValidationModalState({
+        isOpen: true,
+        errors: errs,
+        actionName: 'экспорта в .EML'
+      });
+      return;
+    }
+    setIsExportModalOpen(true);
   };
 
   const [isExportingEml, setIsExportingEml] = useState(false);
@@ -347,7 +387,7 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
                 <h1 className="text-base font-semibold tracking-tight uppercase text-slate-900 flex items-center gap-2">
                   Генератор Документов на Бланке
                   <span className="text-[10px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-sm">
-                    ГОСТ Р 7.0.97-2016
+                    ГОСТ Р 7.0.97–2025
                   </span>
                 </h1>
                 <p className="text-[11px] text-slate-400">Официальные письма, служебные записки и бланки АО «НПО «Тепломаш»</p>
@@ -373,12 +413,11 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
               <button
                 type="button"
                 onClick={() => setIsAuthModalOpen(true)}
-                className="px-3 py-1.5 rounded text-xs font-semibold border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 flex items-center gap-1.5 transition-colors"
-                title="Режим обычного пользователя. Нажмите для входа под администратором"
+                className="px-3 py-1.5 rounded text-xs font-semibold border border-slate-200 text-slate-600 bg-slate-50 hover:bg-slate-100 flex items-center gap-1.5 transition-colors cursor-pointer"
+                title="Нажмите для смены роли или входа под Администратором"
               >
                 <User className="w-3.5 h-3.5 text-slate-500" />
                 <span>Обычный пользователь</span>
-                <span className="text-[10px] text-indigo-600 font-bold ml-0.5">🔑 Админка</span>
               </button>
             ) : (
               <button
@@ -392,6 +431,17 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
             )}
 
             <div className="h-5 w-px bg-slate-200 my-auto" />
+
+            {/* Registry Button on Main Top Panel */}
+            <button
+              type="button"
+              onClick={() => setIsRegistryOpen(true)}
+              className="px-3.5 py-1.5 rounded text-xs font-semibold border border-indigo-300 text-indigo-900 bg-indigo-100/80 hover:bg-indigo-200 flex items-center gap-1.5 transition-colors shadow-2xs"
+              title="Единый реестр исходящих писем АО «НПО «Тепломаш»"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-700" />
+              <span>Реестр писем</span>
+            </button>
 
             <button
               type="button"
@@ -417,34 +467,23 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
               className="px-3.5 py-1.5 rounded text-xs font-semibold border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 flex items-center gap-1.5 transition-colors shadow-2xs"
             >
               <History className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Черновики ({draftsList.length})</span>
+              <span>Документы ({draftsList.length})</span>
             </button>
 
             <div className="h-5 w-px bg-slate-200 my-auto" />
 
-            {/* Attachments & Export Dialog Button */}
+            {/* Single Unified EML Export Button */}
             <button
               type="button"
-              onClick={() => setIsExportModalOpen(true)}
-              className="px-3.5 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
-              title="Открыть окно добавления PDF-приложений и объединения документов"
-            >
-              <Paperclip className="w-4 h-4 text-indigo-200" />
-              <span>Вложения & Экспорт</span>
-            </button>
-
-            {/* EML Email Export Button */}
-            <button
-              type="button"
-              onClick={() => setIsExportModalOpen(true)}
+              onClick={handleOpenExportModal}
               className="px-3.5 py-1.5 rounded bg-emerald-700 hover:bg-emerald-800 active:scale-95 text-white text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs"
-              title="Экспортировать документ с вложениями в файл .EML для отправки по электронной почте"
+              title="Экспортировать документ в файл .EML для отправки по электронной почте"
             >
               <Mail className="w-4 h-4 text-emerald-200" />
-              <span className="hidden sm:inline">Экспорт в .EML</span>
+              <span>Сохранить в .EML</span>
             </button>
 
-            {/* Main Print Button */}
+            {/* Single Unified Print Button */}
             <button
               type="button"
               onClick={handlePrint}
@@ -466,19 +505,6 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
           
           {/* Tabs Navigation */}
           <div className="bg-white p-1 rounded border border-slate-200 shadow-xs flex items-center justify-between gap-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab('header')}
-              className={`flex-1 py-2 px-2.5 rounded text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'header'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <ImageIcon className="w-3.5 h-3.5" />
-              <span>Шапка</span>
-            </button>
-
             <button
               type="button"
               onClick={() => setActiveTab('fields')}
@@ -505,31 +531,24 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
               <span>Подпись</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('style')}
-              className={`flex-1 py-2 px-2.5 rounded text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-                activeTab === 'style'
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-              }`}
-            >
-              <Palette className="w-3.5 h-3.5" />
-              <span>Оформление</span>
-            </button>
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('style')}
+                className={`flex-1 py-2 px-2.5 rounded text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                  activeTab === 'style'
+                    ? 'bg-indigo-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                }`}
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Оформление</span>
+              </button>
+            )}
           </div>
 
           {/* Active Tab Panel Container */}
           <div className="flex-1 bg-white border border-slate-200 rounded p-5 shadow-xs overflow-y-auto max-h-[calc(100vh-180px)]">
-            {activeTab === 'header' && (
-              <HeaderSettings
-                header={docData.header}
-                onChange={(header) => setDocData({ ...docData, header })}
-                userRole={userRole}
-                onRequestAdminAuth={() => setIsAuthModalOpen(true)}
-              />
-            )}
-
             {activeTab === 'fields' && (
               <DocumentForm
                 data={docData}
@@ -547,6 +566,9 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
                 onChange={(signature) => setDocData({ ...docData, signature })}
                 onOpenEmployeeModal={() => setIsEmployeeModalOpen(true)}
                 employees={employees}
+                isAdmin={isAdmin}
+                docData={docData}
+                onDocDataChange={setDocData}
               />
             )}
 
@@ -554,6 +576,7 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
               <StyleControls
                 data={docData}
                 onChange={setDocData}
+                isAdmin={isAdmin}
               />
             )}
           </div>
@@ -572,29 +595,8 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={handlePrint}
-                className="px-2.5 py-1 text-xs font-bold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded border border-slate-300 transition-colors flex items-center gap-1.5 shadow-2xs"
-                title="Распечатать бланк на принтере"
-              >
-                <Printer className="w-3.5 h-3.5 text-slate-700" />
-                <span>Печать бланка</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleExportEml}
-                disabled={isExportingEml}
-                className="px-2.5 py-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 disabled:opacity-60 rounded border border-emerald-200 transition-colors flex items-center gap-1.5 shadow-2xs"
-                title="Скачать документ как .eml письмо для отправки в почтовой программе"
-              >
-                <Mail className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{isExportingEml ? 'Сохранение...' : 'Сохранить .EML'}</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={handleCopyText}
-                className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 rounded transition-colors flex items-center gap-1"
+                className="px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 rounded transition-colors flex items-center gap-1 border border-slate-200"
                 title="Копировать текст документа в буфер"
               >
                 {copiedNotification ? (
@@ -683,6 +685,13 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
         onRequestAdminAuth={() => setIsAuthModalOpen(true)}
       />
 
+      <RegistryModal
+        isOpen={isRegistryOpen}
+        onClose={() => setIsRegistryOpen(false)}
+        userRole={userRole}
+        onRequestAdminAuth={() => setIsAuthModalOpen(true)}
+      />
+
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
@@ -700,6 +709,16 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
         isOpen={isPrintModalOpen}
         onClose={() => setIsPrintModalOpen(false)}
         docData={docData}
+      />
+
+      <ValidationModal
+        isOpen={validationModalState.isOpen}
+        onClose={() => setValidationModalState(prev => ({ ...prev, isOpen: false }))}
+        errors={validationModalState.errors}
+        actionName={validationModalState.actionName}
+        onFixField={() => {
+          setActiveTab('fields');
+        }}
       />
     </div>
     </PortalAuthGate>

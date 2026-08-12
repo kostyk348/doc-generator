@@ -128,6 +128,37 @@ export const renderStampToCanvasPng = (
 };
 
 /**
+ * Generates a random unique Digital Signature key (e.g. "4F8A-9C12-8B0E-3D77")
+ */
+export const generateDigitalSignatureKey = (): string => {
+  const chars = '0123456789ABCDEF';
+  const seg = (len: number) => Array.from({ length: len }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+
+  const existingKeys = new Set<string>();
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem('teplomash_doc_registry_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((doc: { digitalSignatureKey?: string }) => {
+            if (doc.digitalSignatureKey) existingKeys.add(doc.digitalSignatureKey.trim().toUpperCase());
+          });
+        }
+      }
+    } catch {
+      // ignore JSON parse errors
+    }
+  }
+
+  let key = `${seg(4)}-${seg(4)}-${seg(4)}-${seg(4)}`;
+  while (existingKeys.has(key)) {
+    key = `${seg(4)}-${seg(4)}-${seg(4)}-${seg(4)}`;
+  }
+  return key;
+};
+
+/**
  * Extracts clean raw SVG XML from a data URL or XML string.
  */
 export const getRawSvgXml = (svgDataUrlOrXml: string): string => {

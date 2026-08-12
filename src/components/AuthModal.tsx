@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, User, Lock, LogIn, CheckCircle2, AlertCircle, KeyRound, Sparkles, X } from 'lucide-react';
+import { Shield, User, Lock, LogIn, CheckCircle2, AlertCircle, KeyRound, X } from 'lucide-react';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -62,7 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
             <div>
               <h3 className="text-base font-bold tracking-tight">Вход в систему</h3>
-              <p className="text-xs text-indigo-200">Генератор документов ГОСТ Р 7.0.97-2016</p>
+              <p className="text-xs text-indigo-200">Генератор документов ГОСТ Р 7.0.97–2025</p>
             </div>
           </div>
         </div>
@@ -176,18 +176,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       className="w-full text-xs pl-9 pr-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 outline-none"
                     />
                   </div>
-                </div>
-              </div>
-
-              {/* Demo Hint */}
-              <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 flex items-start gap-2">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-bold">Доступ администратора:</span>
-                  <br />
-                  Логин: <code className="bg-amber-100 px-1 rounded font-mono font-bold">admin</code>
-                  {' | '}
-                  Пароль: <code className="bg-amber-100 px-1 rounded font-mono font-bold">admin123</code> (или <code className="bg-amber-100 px-1 rounded font-mono font-bold">admin</code>)
                 </div>
               </div>
 
