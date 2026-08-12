@@ -33,6 +33,10 @@ export interface SignatureConfig {
   senderEmail?: string; // e.g. "romanov@teplomash.ru"
   showStamp: boolean;
   stampImageUrl: string | null;
+  // Electronic Digital Signature (ЭП / ЭЦП)
+  useDigitalSignature?: boolean;
+  digitalSignatureKey?: string;
+  digitalSignatureDate?: string;
 }
 
 export interface DocumentData {
@@ -60,6 +64,7 @@ export interface DocumentData {
   // 3. "Дата" and Ref Number
   date: string; // ISO or formatted date e.g. "04.08.2026"
   refNumber: string; // e.g. "Исх. № 102/26"
+  showInRefNumber?: boolean; // Whether to display incoming reference field/line
   inRefNumber?: string; // e.g. "на № 15/А от 01.08.2026"
   city: string; // e.g. "г. Москва"
   showBarcode?: boolean; // Automatic barcode above date & ref number (deprecated)
@@ -97,6 +102,7 @@ export interface RegisteredDocument {
   subject: string;
   registeredAt: string;
   registeredByRole: 'admin' | 'user';
+  digitalSignatureKey?: string;
 }
 
 export interface DocumentPreset {

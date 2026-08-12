@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { TEPLOMASH_EMPLOYEES, TeplomashEmployee, sanitizeEmployeeDepartments } from '../constants/teplomashEmployees';
+import { TEPLOMASH_EMPLOYEES, DEFAULT_TEPLOMASH_EMPLOYEES, TeplomashEmployee, sanitizeEmployeeDepartments } from '../constants/teplomashEmployees';
 import { 
   X, 
   Search, 
@@ -101,10 +101,6 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
 
   // CRUD Handlers
   const handleOpenAdd = () => {
-    if (!isAdmin) {
-      if (onRequestAdminAuth) onRequestAdminAuth();
-      return;
-    }
     setEditingEmployee({
       id: 'emp-' + Date.now(),
       fullName: '',
@@ -122,35 +118,40 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
   };
 
   const handleOpenEdit = (emp: TeplomashEmployee) => {
-    if (!isAdmin) {
-      if (onRequestAdminAuth) onRequestAdminAuth();
-      return;
-    }
     setEditingEmployee({ ...emp });
     setFormError(null);
     setIsFormOpen(true);
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (!isAdmin) {
-      if (onRequestAdminAuth) onRequestAdminAuth();
-      return;
-    }
     if (window.confirm(`Вы действительно хотите удалить сотрудника «${name}» из базы данных?`)) {
       const updated = employees.filter(e => e.id !== id);
       onUpdateEmployees(updated);
+      try {
+        localStorage.setItem('teplomash_employees_db', JSON.stringify(updated));
+      } catch (e) { console.error(e); }
       setImportStatus({ type: 'success', message: `Сотрудник «${name}» успешно удален из базы.` });
     }
   };
 
-  const handleResetToDefault = () => {
-    if (!isAdmin) {
-      if (onRequestAdminAuth) onRequestAdminAuth();
-      return;
+  const handleClearDatabase = () => {
+    if (window.confirm('Вы действительно хотите полностью очистить базу данных сотрудников? Все существующие записи будут удалены.')) {
+      onUpdateEmployees([]);
+      try {
+        localStorage.setItem('teplomash_employees_db', JSON.stringify([]));
+      } catch (e) { console.error(e); }
+      setImportStatus({ type: 'success', message: 'База данных сотрудников полностью очищена.' });
     }
-    if (window.confirm('Сбросить базу данных к исходному списку сотрудников Тепломаш? Все пользовательские изменения будут отменены.')) {
-      onUpdateEmployees(sanitizeEmployeeDepartments(TEPLOMASH_EMPLOYEES));
-      setImportStatus({ type: 'success', message: 'База данных успешно сброшена к исходному списку Тепломаш.' });
+  };
+
+  const handleResetDefaults = () => {
+    if (window.confirm('Восстановить эталонный справочник сотрудников Тепломаш по умолчанию?')) {
+      const sanitizedDefaults = sanitizeEmployeeDepartments(DEFAULT_TEPLOMASH_EMPLOYEES);
+      onUpdateEmployees(sanitizedDefaults);
+      try {
+        localStorage.setItem('teplomash_employees_db', JSON.stringify(sanitizedDefaults));
+      } catch (e) { console.error(e); }
+      setImportStatus({ type: 'success', message: 'Эталонный список сотрудников Тепломаш успешно восстановлен.' });
     }
   };
 
@@ -195,10 +196,6 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
 
   // Excel Import Handler
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isAdmin) {
-      if (onRequestAdminAuth) onRequestAdminAuth();
-      return;
-    }
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -449,21 +446,11 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
           </div>
 
           <div className="pb-2 flex items-center gap-2">
-            {isAdmin ? (
+            {isAdmin && (
               <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded flex items-center gap-1.5 border border-emerald-200">
                 <Shield className="w-3.5 h-3.5 text-emerald-600" />
                 <span>Режим Администратора — Полный доступ</span>
               </span>
-            ) : (
-              <button
-                type="button"
-                onClick={onRequestAdminAuth}
-                className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-semibold rounded flex items-center gap-1.5 border border-amber-300 transition-colors shadow-2xs"
-                title="Войти с паролем администратора для редактирования и загрузки Excel"
-              >
-                <KeyRound className="w-3.5 h-3.5 text-amber-700" />
-                <span>Войти как Администратор</span>
-              </button>
             )}
           </div>
         </div>
@@ -540,24 +527,7 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
           </div>
         </div>
 
-        {/* Mode Status Banner */}
-        {!isAdmin && (
-          <div className="bg-amber-50 border-b border-amber-200 text-amber-900 px-4 py-2 text-xs flex items-center justify-between gap-2 shrink-0">
-            <div className="flex items-center gap-2">
-              <Lock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-              <span>Режим обычного пользователя (только чтение). Для редактирования, добавления или импорта из Excel войдите как Администратор.</span>
-            </div>
-            {onRequestAdminAuth && (
-              <button
-                type="button"
-                onClick={onRequestAdminAuth}
-                className="font-bold text-amber-800 underline hover:text-amber-950 shrink-0"
-              >
-                Войти (пароль 1234)
-              </button>
-            )}
-          </div>
-        )}
+
 
         {/* Content Area */}
         <div className="p-4 overflow-y-auto flex-1 space-y-3">
@@ -655,6 +625,15 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
                             </>
                           )}
                         </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(emp.id, emp.shortName || emp.fullName)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200 ml-1"
+                          title="Удалить сотрудника из базы"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -700,37 +679,43 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
                     Экспорт в Excel
                   </button>
 
-                  {isAdmin && (
-                    <>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileUpload}
-                        accept=".xlsx, .xls, .csv"
-                        className="hidden"
-                      />
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileUpload}
+                    accept=".xlsx, .xls, .csv"
+                    className="hidden"
+                  />
 
-                      <button
-                        type="button"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-md shadow-2xs transition-colors"
-                        title="Загрузить новый спискок сотрудников из Excel файла"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        Загрузить Excel (.xlsx)
-                      </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-md shadow-2xs transition-colors"
+                    title="Загрузить новый список сотрудников из Excel файла"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Загрузить Excel (.xlsx)
+                  </button>
 
-                      <button
-                        type="button"
-                        onClick={handleResetToDefault}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-md border border-rose-200 transition-colors"
-                        title="Сбросить все изменения к первоначальному списку Тепломаш"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        Сброс
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    onClick={handleResetDefaults}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-semibold text-xs rounded-md transition-colors"
+                    title="Восстановить эталонный список сотрудников Тепломаш"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
+                    Восстановить эталон
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClearDatabase}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-md shadow-2xs transition-colors"
+                    title="Полностью очистить базу данных сотрудников"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Очистить базу
+                  </button>
                 </div>
               </div>
 
@@ -777,31 +762,24 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
                               <div className="text-slate-400">{emp.phone}</div>
                             </td>
                             <td className="p-3 text-right">
-                              {isAdmin ? (
-                                <div className="flex items-center justify-end gap-1">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenEdit(emp)}
-                                    className="p-1.5 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded transition-colors"
-                                    title="Изменить сотрудника"
-                                  >
-                                    <Edit2 className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelete(emp.id, emp.shortName || emp.fullName)}
-                                    className="p-1.5 text-rose-600 hover:text-rose-900 hover:bg-rose-50 rounded transition-colors"
-                                    title="Удалить сотрудника"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
-                                  <Lock className="w-3 h-3 text-amber-600" />
-                                  Только чтение
-                                </span>
-                              )}
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenEdit(emp)}
+                                  className="p-1.5 text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 rounded transition-colors"
+                                  title="Изменить сотрудника"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDelete(emp.id, emp.shortName || emp.fullName)}
+                                  className="p-1.5 text-rose-600 hover:text-rose-900 hover:bg-rose-50 rounded transition-colors"
+                                  title="Удалить сотрудника из базы"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))

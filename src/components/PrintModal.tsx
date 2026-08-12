@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { DocumentData } from '../types';
-import { generateMainDocumentPdfArrayBuffer } from '../utils/pdfMergeUtils';
 import { triggerSystemPrint } from '../utils/printUtils';
-import { Printer, ExternalLink, Download, X, Check, FileCheck, Loader2, AlertCircle, Sparkles } from 'lucide-react';
+import { Printer, X, Check, FileCheck, Sparkles } from 'lucide-react';
 
 interface PrintModalProps {
   isOpen: boolean;
@@ -11,71 +10,13 @@ interface PrintModalProps {
 }
 
 export const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, docData }) => {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [printSuccess, setPrintSuccess] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      handlePreparePdf();
-    } else {
-      if (pdfBlobUrl) {
-        URL.revokeObjectURL(pdfBlobUrl);
-        setPdfBlobUrl(null);
-      }
-      setErrorMessage(null);
-      setPrintSuccess(false);
-    }
-  }, [isOpen]);
-
-  const handlePreparePdf = async () => {
-    try {
-      setIsGenerating(true);
-      setErrorMessage(null);
-
-      const result = await generateMainDocumentPdfArrayBuffer(docData);
-      if (!result) {
-        throw new Error('Не удалось сформировать бланк. Убедитесь, что бланк отображен на экране.');
-      }
-
-      const blob = new Blob([result.buffer], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      setPdfBlobUrl(url);
-    } catch (err: any) {
-      console.error('Print PDF generation error:', err);
-      setErrorMessage(err?.message || 'Ошибка при подготовке файла для печати.');
-    } finally {
-      setIsGenerating(false);
-    }
-  };
 
   const handleTriggerDirectPrint = () => {
     const success = triggerSystemPrint(docData);
     if (success) {
       setPrintSuccess(true);
     }
-  };
-
-  const handleOpenPdfInNewTab = () => {
-    if (pdfBlobUrl) {
-      window.open(pdfBlobUrl, '_blank');
-    }
-  };
-
-  const handleDownloadPdf = () => {
-    if (!pdfBlobUrl) return;
-    const cleanDocType = (docData.docType || 'Документ').trim().replace(/[\\/:*?"<>|]/g, '_');
-    const cleanSubject = (docData.docSubject || '').trim().slice(0, 30).replace(/[\\/:*?"<>|]/g, '_');
-    const dateStr = (docData.date || new Date().toLocaleDateString('ru-RU')).replace(/\./g, '_');
-    const filename = `${cleanDocType}_${cleanSubject || dateStr}_для_печати.pdf`;
-
-    const a = document.createElement('a');
-    a.href = pdfBlobUrl;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
   };
 
   const handleBrowserNativePrint = () => {
@@ -100,7 +41,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, docData
             </div>
             <div>
               <h2 className="text-base font-bold tracking-tight">Печать документа (А4)</h2>
-              <p className="text-xs text-slate-300">Вызов системного диалога и подготовка файлов</p>
+              <p className="text-xs text-slate-300">Печать на бланке ГОСТ Р 7.0.97–2025</p>
             </div>
           </div>
           <button
@@ -152,7 +93,7 @@ export const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, docData
                     <Sparkles className="w-4 h-4 text-amber-300 fill-amber-300" />
                   </div>
                   <div className="text-xs text-indigo-100 font-normal mt-0.5">
-                    Запустить печать бланка А4 со всеми печатями
+                    Запустить печать бланка А4 со всеми полями и печатью
                   </div>
                 </div>
               </div>
@@ -163,54 +104,14 @@ export const PrintModal: React.FC<PrintModalProps> = ({ isOpen, onClose, docData
               )}
             </button>
 
-            {/* Secondary Option: Open PDF in New Tab */}
-            <button
-              type="button"
-              onClick={handleOpenPdfInNewTab}
-              disabled={isGenerating || !pdfBlobUrl}
-              className="w-full p-3.5 rounded-xl border border-slate-200 hover:border-indigo-300 bg-white hover:bg-slate-50 active:scale-[0.99] text-slate-800 font-bold transition-all text-left flex items-center justify-between group disabled:opacity-50"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-                  {isGenerating ? <Loader2 className="w-4 h-4 animate-spin text-indigo-600" /> : <ExternalLink className="w-4 h-4" />}
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-800">Открыть в новой вкладке (PDF)</div>
-                  <div className="text-[11px] text-slate-500 font-normal">
-                    {isGenerating ? 'Формирование файла...' : 'Просмотр и печать (Ctrl+P) через браузер'}
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* Option 3: Download PDF */}
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isGenerating || !pdfBlobUrl}
-              className="w-full p-3.5 rounded-xl border border-slate-200 hover:border-indigo-300 bg-white hover:bg-slate-50 active:scale-[0.99] text-slate-800 font-bold transition-all text-left flex items-center justify-between group disabled:opacity-50"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Download className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-slate-800">Скачать PDF для печати</div>
-                  <div className="text-[11px] text-slate-500 font-normal">
-                    Сохранить готовый документ A4 в высоком качестве
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            {/* Option 4: Browser window.print fallback */}
+            {/* Option 2: Browser window.print fallback */}
             <div className="pt-2 text-center">
               <button
                 type="button"
                 onClick={handleBrowserNativePrint}
                 className="text-[11px] text-slate-500 hover:text-slate-800 underline font-medium transition-colors"
               >
-                Альтернативная печать текущей вкладки (window.print)
+                Прямая печать окна браузера (window.print)
               </button>
             </div>
 

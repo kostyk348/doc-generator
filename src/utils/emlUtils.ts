@@ -43,9 +43,9 @@ export const resolveEmployeeEmail = (
   if (typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem('teplomash_employees_db');
-      if (stored) {
+      if (stored !== null) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           employees = parsed;
         }
       }
@@ -473,8 +473,17 @@ export const buildEmailHtmlWithCids = (
                     ` : ''}
                   </td>
 
-                  <td width="26%" align="center" valign="middle" style="position: relative;">
-                    ${attachments.signatureCid ? `
+                  <td width="36%" align="center" valign="middle" style="position: relative;">
+                    ${signature.useDigitalSignature ? `
+                      <div style="border: 2px solid #312e81; background-color: #f0fdf4; border-radius: 4px; padding: 6px 8px; font-family: Arial, sans-serif; font-size: 8pt; color: #1e1b4b; text-align: left; line-height: 1.3;">
+                        <div style="font-weight: bold; border-bottom: 1px solid #4338ca; padding-bottom: 3px; margin-bottom: 3px; font-size: 7.5pt; color: #312e81;">
+                          🛡 ДОКУМЕНТ ПОДПИСАН ЭП
+                        </div>
+                        <div><b>Ключ:</b> <span style="font-family: monospace; font-weight: bold;">${escapeHtml(signature.digitalSignatureKey || '4F8A-9C12-8B0E-3D77')}</span></div>
+                        <div><b>Владелец:</b> ${escapeHtml(signature.senderName || 'Сотрудник')}</div>
+                        <div><b>Дата:</b> ${escapeHtml(signature.digitalSignatureDate || date || new Date().toLocaleDateString('ru-RU'))}</div>
+                      </div>
+                    ` : attachments.signatureCid ? `
                       <img src="cid:${attachments.signatureCid}" alt="Подпись" height="52" style="max-height: 52px; width: auto; display: block; margin: 0 auto; border: 0;" />
                     ` : `
                       <div style="border-bottom: 1px solid #0f172a; width: 85%; margin: 0 auto; text-align: center; font-size: 8pt; color: #94a3b8; font-family: Arial, sans-serif;">
@@ -720,10 +729,7 @@ export const generateEmlFileContentAsync = async (
     }
   }
 
-  // 4. Render PDF Document Attachment
-  const pdfAttachment = await generateDocumentPdfBase64(data);
-
-  // 5. Build HTML body with CIDs
+  // Build HTML body with CIDs
   const htmlBody = buildEmailHtmlWithCids(data, cidMap);
   const subjectText = `${data.docType || 'Документ'}${data.docSubject ? `: ${data.docSubject}` : ''}`;
 
@@ -784,48 +790,18 @@ export const generateEmlFileContentAsync = async (
   });
 
   emlLines.push(``, `--${relatedBoundary}--`);
-
-  // Append PDF Document File Attachment
-  if (pdfAttachment) {
-    emlLines.push(
-      ``,
-      `--${mixedBoundary}`,
-      `Content-Type: application/pdf; name="${pdfAttachment.filename}"`,
-      `Content-Transfer-Encoding: base64`,
-      `Content-Disposition: attachment; filename="${pdfAttachment.filename}"`,
-      ``,
-      formatBase64ForMime(pdfAttachment.base64)
-    );
-  }
-
-  // Append any extra user-uploaded PDF attachments
-  if (extraAttachments && extraAttachments.length > 0) {
-    extraAttachments.forEach((att) => {
-      emlLines.push(
-        ``,
-        `--${mixedBoundary}`,
-        `Content-Type: application/pdf; name="${att.filename}"`,
-        `Content-Transfer-Encoding: base64`,
-        `Content-Disposition: attachment; filename="${att.filename}"`,
-        ``,
-        formatBase64ForMime(att.base64Data)
-      );
-    });
-  }
-
   emlLines.push(``, `--${mixedBoundary}--`, ``);
 
   return emlLines.join('\r\n');
 };
 
 /**
- * Triggers a client-side file download for the .eml email file with embedded images and extra PDF attachments
+ * Triggers a client-side file download for the .eml email file with embedded images
  */
 export const downloadDocumentAsEml = async (
-  data: DocumentData,
-  extraAttachments?: ExtraPdfAttachment[]
+  data: DocumentData
 ): Promise<string> => {
-  const emlContent = await generateEmlFileContentAsync(data, extraAttachments);
+  const emlContent = await generateEmlFileContentAsync(data);
   const blob = new Blob([emlContent], { type: 'message/rfc822;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   

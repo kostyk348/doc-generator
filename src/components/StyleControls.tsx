@@ -1,13 +1,32 @@
 import React from 'react';
 import { DocumentData } from '../types';
-import { Type, Sliders, Layout } from 'lucide-react';
+import { Type, Layout, Lock } from 'lucide-react';
 
 interface StyleControlsProps {
   data: DocumentData;
   onChange: (data: DocumentData) => void;
+  isAdmin?: boolean;
 }
 
-export const StyleControls: React.FC<StyleControlsProps> = ({ data, onChange }) => {
+export const StyleControls: React.FC<StyleControlsProps> = ({ data, onChange, isAdmin }) => {
+  if (!isAdmin) {
+    return (
+      <div className="bg-slate-900 text-white border border-slate-700 rounded-xl p-5 text-xs leading-relaxed flex items-start gap-3 shadow-md">
+        <div className="w-9 h-9 rounded-lg bg-amber-500/20 border border-amber-400/30 flex items-center justify-center shrink-0 text-amber-400">
+          <Lock className="w-5 h-5" />
+        </div>
+        <div>
+          <span className="font-bold text-amber-300 uppercase tracking-wider block mb-1">
+            Настройка шрифтов и полей недоступна
+          </span>
+          <p className="text-slate-300 text-[11.5px] leading-relaxed">
+            Шрифт бланка и размеры ГОСТ-полей страницы А4 задаются централизованно Администратором.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Font Family Selector */}
@@ -141,17 +160,11 @@ export const StyleControls: React.FC<StyleControlsProps> = ({ data, onChange }) 
           </div>
         </div>
 
-        <div className="pt-2">
-          <button
-            type="button"
-            onClick={() => onChange({
-              ...data,
-              margins: { top: 20, bottom: 20, left: 30, right: 15 }
-            })}
-            className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
-          >
-            Установить стандартные поля ГОСТ (30мм слева, 15мм справа, 20мм сверху/снизу)
-          </button>
+        <div className="pt-1">
+          <div className="p-2.5 rounded bg-slate-50 border border-slate-200 text-slate-600 text-xs flex items-center justify-between">
+            <span className="font-semibold text-slate-700">ГОСТ Р 7.0.97–2025 (до 10 лет):</span>
+            <span className="font-mono text-[11px] font-bold text-slate-900">20 / 10 / 20 / 20 мм</span>
+          </div>
         </div>
       </div>
     </div>
