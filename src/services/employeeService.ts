@@ -7,14 +7,33 @@
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
 import { DEPARTMENT_CODES, guessDepartmentCode } from '../constants/departmentCodes';
 
+const EMPLOYEES_KEY = 'teplomash_employees_db';
+
 export class EmployeeService {
+  /**
+   * Helper to fetch current employee database from localStorage or fall back to default
+   */
+  public static getStoredEmployees(): TeplomashEmployee[] {
+    try {
+      const saved = localStorage.getItem(EMPLOYEES_KEY);
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return TEPLOMASH_EMPLOYEES;
+  }
+
   /**
    * Search employees by query string (name, position, department)
    */
   public static searchEmployees(query: string): TeplomashEmployee[] {
-    if (!query.trim()) return TEPLOMASH_EMPLOYEES;
+    const list = this.getStoredEmployees();
+    if (!query.trim()) return list;
     const lower = query.toLowerCase();
-    return TEPLOMASH_EMPLOYEES.filter(
+    return list.filter(
       (emp) =>
         emp.fullName.toLowerCase().includes(lower) ||
         emp.position.toLowerCase().includes(lower) ||
@@ -40,8 +59,9 @@ export class EmployeeService {
    * Find a specific employee by name or position.
    */
   public static findEmployee(fullNameOrPosition: string): TeplomashEmployee | undefined {
+    const list = this.getStoredEmployees();
     const lower = fullNameOrPosition.toLowerCase();
-    return TEPLOMASH_EMPLOYEES.find(
+    return list.find(
       emp => emp.fullName.toLowerCase().includes(lower) || emp.position.toLowerCase().includes(lower)
     );
   }

@@ -59,6 +59,7 @@ export const DraftsModal: React.FC<DraftsModalProps> = ({
   const filteredDrafts = drafts.filter(draft => 
     draft.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     draft.data.docType.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (draft.data.refNumber && draft.data.refNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
     draft.data.recipient.organization.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -73,8 +74,8 @@ export const DraftsModal: React.FC<DraftsModalProps> = ({
               <History className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-900 text-base">История черновиков и сохраненных документов</h3>
-              <p className="text-xs text-slate-500">Быстрый доступ к предыдущим версиям и сохраненным бланкам</p>
+              <h3 className="font-bold text-slate-900 text-base">Мои документы и черновики</h3>
+              <p className="text-xs text-slate-500">Архив всех опубликованных писем, сохраненных бланков и черновиков</p>
             </div>
           </div>
           <button
@@ -95,6 +96,7 @@ export const DraftsModal: React.FC<DraftsModalProps> = ({
                 <span className="text-xs font-bold text-indigo-950 uppercase tracking-wider block">Текущий открытый документ</span>
                 <p className="text-xs text-indigo-900 truncate font-medium">
                   {currentDoc.docType}: {currentDoc.recipient.organization || currentDoc.recipient.position || 'Без наименования'}
+                  {currentDoc.isPublished && ` (Опубликован № ${currentDoc.refNumber})`}
                 </p>
               </div>
               <button
@@ -103,12 +105,12 @@ export const DraftsModal: React.FC<DraftsModalProps> = ({
                 className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white rounded-lg text-xs font-semibold shadow-xs transition-all shrink-0 flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" />
-                Сохранить текущий в черновики
+                Сохранить в документы
               </button>
             </div>
           ) : (
             <form onSubmit={handleSave} className="bg-indigo-50 border border-indigo-300 rounded-xl p-3.5 space-y-3">
-              <label className="block text-xs font-bold text-indigo-950 uppercase tracking-wider">Название для сохранения черновика</label>
+              <label className="block text-xs font-bold text-indigo-950 uppercase tracking-wider">Название для сохранения документа</label>
               <input
                 type="text"
                 value={newTitle}
@@ -142,7 +144,7 @@ export const DraftsModal: React.FC<DraftsModalProps> = ({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по черновикам..."
+                placeholder="Поиск по документам и черновикам..."
                 className="w-full text-xs p-2.5 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
@@ -152,65 +154,85 @@ export const DraftsModal: React.FC<DraftsModalProps> = ({
           {filteredDrafts.length === 0 ? (
             <div className="text-center py-10 px-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
               <FolderOpen className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-slate-700">Нет сохраненных черновиков</p>
+              <p className="text-xs font-semibold text-slate-700">Нет сохраненных документов или черновиков</p>
               <p className="text-[11px] text-slate-400 mt-1">
-                {searchQuery ? 'По вашему запросу ничего не найдено' : 'Нажмите «Сохранить текущий в черновики», чтобы зафиксировать копию'}
+                {searchQuery ? 'По вашему запросу ничего не найдено' : 'После опубликования письмо автоматически сохраняется в этот список'}
               </p>
             </div>
           ) : (
             <div className="space-y-2.5">
-              {filteredDrafts.map((draft) => (
-                <div
-                  key={draft.id}
-                  className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-indigo-300 hover:shadow-xs transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700">
-                        {draft.data.docType || 'Документ'}
-                      </span>
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {draft.savedAt}
-                      </span>
+              {filteredDrafts.map((draft) => {
+                const isPub = draft.data.isPublished;
+                return (
+                  <div
+                    key={draft.id}
+                    className={`p-3.5 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                      isPub 
+                        ? 'bg-emerald-50/40 border-emerald-200 hover:border-emerald-400' 
+                        : 'bg-white border-slate-200 hover:border-indigo-300 shadow-2xs'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        {isPub ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            🔒 Опубликован {draft.data.refNumber ? `№ ${draft.data.refNumber}` : ''}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-700">
+                            📝 Черновик
+                          </span>
+                        )}
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                          {draft.data.docType || 'Документ'}
+                        </span>
+                        <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {draft.savedAt}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-bold text-slate-900 truncate">{draft.title}</h4>
+                      <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                        Адресат: {draft.data.recipient.organization || draft.data.recipient.position || '—'} ({draft.data.recipient.name || '—'})
+                      </p>
                     </div>
-                    <h4 className="text-xs font-bold text-slate-900 truncate">{draft.title}</h4>
-                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                      Адресат: {draft.data.recipient.organization || draft.data.recipient.position || '—'} ({draft.data.recipient.name || '—'})
-                    </p>
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onLoadDraft(draft.data);
-                        onClose();
-                      }}
-                      className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5"
-                    >
-                      <span>Загрузить</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onLoadDraft(draft.data);
+                          onClose();
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                          isPub
+                            ? 'bg-emerald-700 hover:bg-emerald-800 text-white shadow-2xs'
+                            : 'bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700'
+                        }`}
+                      >
+                        <span>{isPub ? 'Открыть документ' : 'Загрузить'}</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => onDeleteDraft(draft.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Удалить черновик"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteDraft(draft.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Удалить из списка"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
         {/* Modal Footer */}
         <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
-          <span>Всего сохраненных черновиков: {drafts.length}</span>
+          <span>Всего документов в архиве: {drafts.length}</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-medium transition-colors"

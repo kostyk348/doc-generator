@@ -74,8 +74,9 @@ export const DEPARTMENT_CODES: DepartmentCodeInfo[] = [
   }
 ];
 
-export const DEPT_COUNTERS_KEY = 'teplomash_doc_dept_counters_v2';
-export const DOC_REGISTRY_KEY = 'teplomash_registered_docs_registry_v2';
+export const DEPT_COUNTERS_KEY = 'teplomash_doc_dept_counters_v3';
+export const DEPT_COUNTERS_DATE_KEY = 'teplomash_doc_dept_counters_date_v3';
+export const DOC_REGISTRY_KEY = 'teplomash_registered_docs_registry_v3';
 
 export interface DeptCounters {
   [deptCode: string]: number;
@@ -94,6 +95,7 @@ export interface RegisteredDocument {
   subject: string;
   registeredAt: string; // ISO date timestamp
   registeredByRole: 'admin' | 'user';
+  digitalSignatureKey?: string;
 }
 
 export const getDefaultDeptCounters = (): DeptCounters => {
@@ -114,6 +116,17 @@ export const getDefaultDeptCounters = (): DeptCounters => {
 
 export const getDeptCounters = (): DeptCounters => {
   try {
+    const todayStr = new Date().toLocaleDateString('ru-RU');
+    const savedDate = localStorage.getItem(DEPT_COUNTERS_DATE_KEY);
+
+    // DAILY COUNTER RESET: If a new calendar day has started, reset sequence counters back to 1
+    if (savedDate !== todayStr) {
+      const defaultCounters = getDefaultDeptCounters();
+      localStorage.setItem(DEPT_COUNTERS_KEY, JSON.stringify(defaultCounters));
+      localStorage.setItem(DEPT_COUNTERS_DATE_KEY, todayStr);
+      return defaultCounters;
+    }
+
     const saved = localStorage.getItem(DEPT_COUNTERS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
@@ -127,7 +140,9 @@ export const getDeptCounters = (): DeptCounters => {
 
 export const saveDeptCounters = (counters: DeptCounters): void => {
   try {
+    const todayStr = new Date().toLocaleDateString('ru-RU');
     localStorage.setItem(DEPT_COUNTERS_KEY, JSON.stringify(counters));
+    localStorage.setItem(DEPT_COUNTERS_DATE_KEY, todayStr);
   } catch (e) {
     console.error('Error saving department counters', e);
   }
@@ -195,6 +210,7 @@ export const registerDocumentInDb = (params: {
   subject?: string;
   role?: 'admin' | 'user';
   manualRequestedSeq?: number;
+  digitalSignatureKey?: string;
 }): { registeredDoc: RegisteredDocument; wasAdjustedForUniqueness: boolean } => {
   const registry = getDocumentRegistry();
   const deptCode = (params.deptCode || 'Д').toUpperCase().trim();
@@ -231,7 +247,8 @@ export const registerDocumentInDb = (params: {
       day: '2-digit', month: '2-digit', year: 'numeric',
       hour: '2-digit', minute: '2-digit'
     }),
-    registeredByRole: params.role || 'user'
+    registeredByRole: params.role || 'user',
+    digitalSignatureKey: params.digitalSignatureKey
   };
 
   const updatedRegistry = [registeredDoc, ...registry];
@@ -241,6 +258,12 @@ export const registerDocumentInDb = (params: {
   setDepartmentSeq(deptCode, candidateSeq + 1);
 
   return { registeredDoc, wasAdjustedForUniqueness };
+};
+
+export const updateRegisteredDocumentInDb = (updatedDoc: RegisteredDocument): void => {
+  const registry = getDocumentRegistry();
+  const updated = registry.map(item => item.id === updatedDoc.id ? updatedDoc : item);
+  saveDocumentRegistry(updated);
 };
 
 export const deleteRegisteredDocumentFromDb = (id: string): void => {

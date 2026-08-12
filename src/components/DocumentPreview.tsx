@@ -1,6 +1,7 @@
 import React from 'react';
 import { DocumentData } from '../types';
 import { buildStampSvg, renderStampToCanvasPng } from '../utils/stampUtils';
+import { generateDocumentNumber, guessDepartmentCode, getNextDepartmentSeq } from '../constants/departmentCodes';
 
 interface DocumentPreviewProps {
   data: DocumentData;
@@ -9,6 +10,17 @@ interface DocumentPreviewProps {
 
 export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 1.0 }) => {
   const { header, recipient, docType, docSubject, date, refNumber, inRefNumber, city, content, signature, fontFamily, fontSize, lineSpacing, margins } = data;
+
+  // Determine effective outgoing registration number (saved or dynamically projected for draft)
+  const deptCode = guessDepartmentCode(signature.senderDepartment, signature.senderPosition);
+  const projectedSeq = getNextDepartmentSeq(deptCode);
+  const computedNumber = generateDocumentNumber(date || new Date().toLocaleDateString('ru-RU'), projectedSeq, deptCode);
+  const effectiveRefNumber = refNumber && refNumber.trim() ? refNumber.trim() : computedNumber;
+
+  const cleanDate = (date || new Date().toLocaleDateString('ru-RU'))
+    .trim()
+    .replace(/г\.?$/i, '')
+    .trim();
 
   // Compute font family CSS value
   const fontStyle = {
@@ -47,39 +59,43 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
         className="w-[210mm] min-h-[297mm] bg-white text-slate-900 shadow-xl print:shadow-none print:w-[210mm] print:h-[297mm] print:m-0 rounded-xs transition-transform duration-150 relative flex flex-col justify-start box-border overflow-hidden"
       >
         <div className="flex-1">
-          {/* ================= 1. HEADER IMAGE ================= */}
-          {header.imageUrl ? (
-            <div 
-              className="w-full flex" 
-              style={{ marginBottom: `${header.marginBottom}px` }}
-            >
-              <div className={`flex ${getHeaderAlignClass()} w-full`}>
-                <img
-                  src={header.imageUrl}
-                  alt="Фирменный бланк организации"
-                  style={{
-                    width: '100%',
-                    height: 'auto'
-                  }}
-                  className="w-full h-auto object-contain transition-all block"
-                />
-              </div>
-            </div>
-          ) : (
-            <div 
-              style={{ marginBottom: `${header.marginBottom}px` }}
-              className="w-full border-b-2 border-slate-900 pb-3 mb-6 text-center"
-            >
-              <h1 className="font-bold text-lg uppercase tracking-wider">ФИРМЕННЫЙ БЛАНК ОРГАНИЗАЦИИ</h1>
-              <p className="text-xs text-slate-500">Загрузите картинку шапки бланка в панели настроек</p>
-            </div>
-          )}
+          {/* ================= 1. HEADER IMAGE (ONLY SHOWN FOR EXTERNAL ORGANIZATIONS) ================= */}
+          {recipient.recipientType === 'external' && (
+            <>
+              {header.imageUrl ? (
+                <div 
+                  className="w-full flex" 
+                  style={{ marginBottom: `${header.marginBottom}px` }}
+                >
+                  <div className={`flex ${getHeaderAlignClass()} w-full`}>
+                    <img
+                      src={header.imageUrl}
+                      alt="Фирменный бланк организации"
+                      style={{
+                        width: '100%',
+                        height: 'auto'
+                      }}
+                      className="w-full h-auto object-contain transition-all block"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div 
+                  style={{ marginBottom: `${header.marginBottom}px` }}
+                  className="w-full border-b-2 border-slate-900 pb-3 mb-6 text-center"
+                >
+                  <h1 className="font-bold text-lg uppercase tracking-wider">ФИРМЕННЫЙ БЛАНК ОРГАНИЗАЦИИ</h1>
+                  <p className="text-xs text-slate-500">Загрузите картинку шапки бланка в панели настроек</p>
+                </div>
+              )}
 
-          {header.showDividerLine && (
-            <div 
-              className="w-full my-3"
-              style={{ borderBottom: `1.5px solid ${header.dividerColor}` }}
-            />
+              {header.showDividerLine && (
+                <div 
+                  className="w-full my-3"
+                  style={{ borderBottom: `1.5px solid ${header.dividerColor}` }}
+                />
+              )}
+            </>
           )}
 
           {/* ================= 2. RECIPIENT BLOCK ("Кому") ================= */}
@@ -106,17 +122,17 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
           {/* ================= 3. DATE & REF NUMBER LINE (STRICT SANS-SERIF GOST STYLE) ================= */}
           <div className="flex items-end justify-between w-full border-b border-slate-300 pb-2 mb-8 text-xs text-slate-900 font-sans tracking-tight">
             <div className="space-y-1">
-              <div className="flex items-center gap-4">
-                {date && <span className="font-semibold">{date}г.</span>}
-                {refNumber && <span className="font-bold">{refNumber}</span>}
+              <div className="flex items-center gap-2 font-bold">
+                <span>Исх. № {effectiveRefNumber} от {cleanDate}г.</span>
               </div>
-              {inRefNumber && (
+              {inRefNumber && inRefNumber.trim() !== '' && (
                 <div className="text-[11px] text-slate-600 font-normal">{inRefNumber}</div>
               )}
             </div>
-
             {city && (
-              <div className="font-semibold">{city}</div>
+              <div className="font-medium text-slate-800 text-xs">
+                {city}
+              </div>
             )}
           </div>
 
@@ -169,9 +185,34 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
               )}
             </div>
 
-            {/* Signature Graphic / Line */}
-            <div className="w-[25%] flex items-center justify-center relative z-10 min-h-[50px] border-none bg-transparent shadow-none">
-              {signature.type === 'placeholder' || !signature.imageUrl ? (
+            {/* Signature Graphic / Digital Signature Stamp / Line */}
+            <div className="w-[38%] flex items-center justify-center relative z-10 min-h-[50px] border-none bg-transparent shadow-none">
+              {signature.useDigitalSignature ? (
+                <div className="w-full border-2 border-indigo-900 rounded bg-indigo-50/60 p-2 font-sans text-indigo-950 shadow-2xs text-[8pt] leading-tight select-none">
+                  <div className="border-b border-indigo-800 pb-1 mb-1 font-bold flex items-center justify-between text-[8pt] tracking-tight">
+                    <span className="flex items-center gap-1 uppercase">
+                      <svg className="w-3.5 h-3.5 text-indigo-900 shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                      </svg>
+                      ДОКУМЕНТ ПОДПИСАН ЭП
+                    </span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="font-mono font-semibold text-indigo-900">
+                      <span className="font-sans font-normal text-indigo-700">Ключ:</span> {signature.digitalSignatureKey || '4F8A-9C12-8B0E-3D77'}
+                    </div>
+                    <div>
+                      <span className="text-indigo-700">Владелец:</span> <strong className="font-bold">{signature.senderName || 'Сотрудник'}</strong>
+                    </div>
+                    <div>
+                      <span className="text-indigo-700">Дата:</span> {signature.digitalSignatureDate || cleanDate}
+                    </div>
+                    <div className="text-[7pt] text-indigo-800 font-medium pt-0.5 border-t border-indigo-200/60 mt-0.5">
+                      Зарегистрировано в реестре писем Тепломаш
+                    </div>
+                  </div>
+                </div>
+              ) : signature.type === 'placeholder' || !signature.imageUrl ? (
                 <div className="w-full border-b border-slate-900 text-center pb-1 text-[10px] leading-tight font-sans text-slate-400 select-none">
                   (подпись)
                 </div>
@@ -189,37 +230,6 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
               {signature.senderName || 'Ф.И.О.'}
             </div>
           </div>
-
-          {/* Stamp Block / Round Seal Overlay positioned right over/near FIO */}
-          {signature.showStamp && (
-            <div className="stamp-block absolute -top-10 right-2 z-20 pointer-events-none select-none">
-              <div className="w-36 h-36 flex items-center justify-center opacity-90 mix-blend-multiply">
-                <img
-                  src={
-                    signature.stampImageUrl ||
-                    renderStampToCanvasPng(
-                      signature.senderOrganization || 'АО «НПО «ТЕПЛОМАШ»',
-                      'САНКТ-ПЕТЕРБУРГ * ОГРН 1027809212573',
-                      signature.senderDepartment || 'ОТДЕЛ ПРОДАЖ',
-                      signature.senderPosition || 'Сотрудник',
-                      'ДЛЯ ДОКУМЕНТОВ',
-                      '#1d4ed8'
-                    ) ||
-                    buildStampSvg(
-                      signature.senderOrganization || 'АО «НПО «ТЕПЛОМАШ»',
-                      'САНКТ-ПЕТЕРБУРГ * ОГРН 1027809212573',
-                      signature.senderDepartment || 'ОТДЕЛ ПРОДАЖ',
-                      signature.senderPosition || 'Сотрудник',
-                      'ДЛЯ ДОКУМЕНТОВ',
-                      '#1d4ed8'
-                    )
-                  }
-                  alt="Печать организации"
-                  className="w-36 h-36 object-contain transform -rotate-6 block border-none bg-transparent shadow-none rounded-full"
-                />
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </div>

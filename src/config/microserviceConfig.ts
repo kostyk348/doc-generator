@@ -38,7 +38,7 @@ export const DEFAULT_MICROSERVICE_CONFIG: MicroserviceConfig = {
     aiAssistant: true,
     autoRegistry: true,
     employeeIntegration: true,
-    pdfExport: true,
+    pdfExport: false,
     excelExport: true,
     signatureCanvas: true,
   },

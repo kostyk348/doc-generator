@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { DocumentData } from '../types';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
+import { getInitialBlankDocument } from '../constants/presets';
+import { validateDocument, ValidationError } from '../utils/validationUtils';
 import { 
   DEPARTMENT_CODES, 
   generateDocumentNumber, 
@@ -14,6 +16,7 @@ import {
   setDepartmentSeq,
   DeptCounters,
   registerDocumentInDb,
+  updateRegisteredDocumentInDb,
   deleteRegisteredDocumentFromDb,
   clearDocumentRegistryDb,
   getDocumentRegistry,
@@ -34,6 +37,7 @@ import {
   FileSpreadsheet,
   Lock,
   Shield,
+  ShieldCheck,
   Hash,
   Info,
   Check,
@@ -45,11 +49,14 @@ import {
   CheckCircle2,
   Search,
   Trash2,
+  Pencil,
   KeyRound,
-  ShieldCheck,
   Archive,
   Database,
-  Send
+  Copy,
+  Send,
+  AlertTriangle,
+  ShieldAlert
 } from 'lucide-react';
 
 interface DocumentFormProps {
@@ -85,37 +92,6 @@ const EXTERNAL_DOC_TYPES = [
   'ДОВЕРЕННОСТЬ'
 ];
 
-const EXTERNAL_COMPANY_PRESETS = [
-  {
-    org: 'ООО «ТехноПром-Автоматизация»',
-    position: 'Генеральному директору',
-    name: 'Иванову Игорю Сергеевичу',
-    address: '190000, г. Санкт-Петербург, Невский пр., д. 10',
-    inn: 'ИНН 7801234567 / КПП 780101001'
-  },
-  {
-    org: 'ПАО «Газпром Автоматизация»',
-    position: 'Директору по закупкам',
-    name: 'Петрову Петру Петровичу',
-    address: '197229, г. Санкт-Петербург, Лахтинский пр., д. 2',
-    inn: 'ИНН 7704028300 / КПП 781501001'
-  },
-  {
-    org: 'АО «Завод Компрессор»',
-    position: 'Главный инженеру',
-    name: 'Сидорову Сергею Анатольевичу',
-    address: '195009, г. Санкт-Петербург, Большой Сампсониевский пр., д. 45',
-    inn: 'ИНН 7802001122'
-  },
-  {
-    org: 'ООО «Промышленное Оборудование»',
-    position: 'Начальнику отдела снабжения',
-    name: 'Васильеву В. В.',
-    address: '101000, г. Москва, ул. Мясницкая, д. 18',
-    inn: 'ИНН 7701998877'
-  }
-];
-
 // Helper to parse HTML content into editable multiline text
 const htmlToText = (html: string): string => {
   if (!html) return '';
@@ -149,7 +125,7 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
   onRequestAdminAuth
 }) => {
   const isAdmin = userRole === 'admin';
-  const employeeList = employees && employees.length > 0 ? employees : TEPLOMASH_EMPLOYEES;
+  const employeeList = employees || [];
   const isInternal = data.recipient.recipientType !== 'external';
 
   const currentDocTypes = isInternal ? INTERNAL_DOC_TYPES : EXTERNAL_DOC_TYPES;
@@ -167,7 +143,10 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
   const [isCountersModalOpen, setIsCountersModalOpen] = useState<boolean>(false);
   const [activeModalTab, setActiveModalTab] = useState<'log' | 'counters'>('log');
   const [registrySearch, setRegistrySearch] = useState<string>('');
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
+  const [editingDocData, setEditingDocData] = useState<RegisteredDocument | null>(null);
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
+  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState<boolean>(false);
 
   const [selectedDeptCode, setSelectedDeptCode] = useState<string>(() => {
     if (parsedRef?.code) return parsedRef.code;
@@ -196,44 +175,92 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
     }
   }, [data.signature.senderDepartment, data.signature.senderPosition]);
 
+  // Calculate current document validation errors
+  const validationErrors = validateDocument(data);
+
+  // 1. Triggered on click: checks duplicates and opens confirmation dialog
   const handlePublishAndRegisterDocument = () => {
+    const valErrors = validateDocument(data);
+    if (valErrors.length > 0) {
+      setNotifyMsg(`ОШИБКА: Заполните обязательные поля (${valErrors.map(e => e.title).join('; ')})`);
+      setTimeout(() => setNotifyMsg(null), 6000);
+      return;
+    }
+
+    const registry = getDocumentRegistry();
+    const newSubject = (data.docSubject || data.docType || '').trim().toLowerCase();
+    const newRecipient = (data.recipient.name || data.recipient.organization || '').trim().toLowerCase();
+    const newContentClean = rawText.trim().replace(/\s+/g, ' ').toLowerCase();
+
+    if (newSubject.length > 0 || newContentClean.length > 0) {
+      const duplicate = registry.find(item => {
+        const itemSubject = (item.subject || '').trim().toLowerCase();
+        const itemRecipient = (item.recipientName || '').trim().toLowerCase();
+        return (
+          itemSubject === newSubject &&
+          (itemRecipient === newRecipient || (newRecipient.length > 0 && itemRecipient.includes(newRecipient)))
+        );
+      });
+
+      if (duplicate) {
+        setNotifyMsg(`ОШИБКА: Документ с аналогичной темой и адресатом уже зафиксирован под № ${duplicate.regNumber} от ${duplicate.date}! Повторное занесение дубликатов запрещено.`);
+        setTimeout(() => setNotifyMsg(null), 6000);
+        return;
+      }
+    }
+
+    // Open warning confirmation modal
+    setIsPublishConfirmOpen(true);
+  };
+
+  // 2. Executed after user confirms in warning modal
+  const executeRegistration = () => {
     const todayDate = new Date().toLocaleDateString('ru-RU');
     const deptCodeToUse = guessDepartmentCode(data.signature.senderDepartment, data.signature.senderPosition);
 
-    // Unique registration in database taking into account date & department code
-    const { registeredDoc, wasAdjustedForUniqueness } = registerDocumentInDb({
+    const { registeredDoc } = registerDocumentInDb({
       dateStr: todayDate,
       deptCode: deptCodeToUse,
       composerName: data.signature.senderName || 'Не указан',
       composerDept: data.signature.senderDepartment || data.signature.senderPosition || 'Дирекция',
-      recipientName: data.recipient.name ? `${data.recipient.organization || ''} (${data.recipient.name})` : 'Внутренний адресат',
+      recipientName: data.recipient.name ? `${data.recipient.organization || ''} (${data.recipient.name})` : (data.recipient.organization || 'Внутренний адресат'),
       subject: data.docSubject || data.docType || 'Официальный документ',
       role: isAdmin ? 'admin' : 'user'
     });
 
-    const publishedTimestamp = new Date().toLocaleString('ru-RU', {
-      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
-
-    onChange({
+    const publishedDoc: DocumentData = {
       ...data,
-      date: todayDate,
       refNumber: registeredDoc.regNumber,
-      isPublished: true,
-      publishedAt: publishedTimestamp
-    });
+      date: todayDate,
+      isPublished: true
+    };
 
     setDeptCounters(getDeptCounters());
     setRegistryList(getDocumentRegistry());
     setSelectedDeptCode(deptCodeToUse);
     setSeqIndex(registeredDoc.seq + 1);
 
-    if (wasAdjustedForUniqueness) {
-      setNotifyMsg(`ОПУБЛИКОВАНО! Уникальный № ${registeredDoc.regNumber} зафиксирован в базе (присвоен следующий свободный №)`);
-    } else {
-      setNotifyMsg(`ОПУБЛИКОВАНО! Письмо зарегистрировано под № ${registeredDoc.regNumber} и занесено в реестр.`);
+    // Save published document into saved documents history / localStorage
+    const savedTitle = `${data.docType || 'Документ'} № ${registeredDoc.regNumber} от ${todayDate}`;
+    try {
+      const saved = localStorage.getItem('official_doc_drafts_history');
+      const list = saved ? JSON.parse(saved) : [];
+      const newDraft = {
+        id: `published-${registeredDoc.regNumber.replace(/[\/\s]/g, '-')}-${Date.now()}`,
+        title: savedTitle,
+        savedAt: `${todayDate} ${new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}`,
+        data: publishedDoc
+      };
+      localStorage.setItem('official_doc_drafts_history', JSON.stringify([newDraft, ...list]));
+    } catch (e) {
+      console.error(e);
     }
-    setTimeout(() => setNotifyMsg(null), 5000);
+
+    // Keep published document active on screen with read-only lock
+    onChange(publishedDoc);
+
+    setNotifyMsg(`ОПУБЛИКОВАНО! Письмо зарегистрировано под № ${registeredDoc.regNumber} и сохранено в «Документы». Редактирование заблокировано.`);
+    setTimeout(() => setNotifyMsg(null), 6000);
   };
 
   // Sync raw text when external content changes (e.g. AI or preset load)
@@ -275,6 +302,33 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* LIVE VALIDATION STATUS ALERT BAR */}
+      {validationErrors.length > 0 ? (
+        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 shadow-2xs space-y-1.5 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 font-bold text-xs text-rose-900">
+            <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>Необходимо заполнить обязательные поля ({validationErrors.length}):</span>
+          </div>
+          <ul className="text-[11px] text-rose-800 space-y-1 pl-6 list-disc">
+            {validationErrors.map((err, idx) => (
+              <li key={idx}>
+                <strong>{err.title}:</strong> {err.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3.5 py-2.5 flex items-center justify-between text-xs font-semibold text-emerald-900 animate-in fade-in duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Все обязательные поля заполнены (текст, составитель и адресат)</span>
+          </div>
+          <span className="text-[10px] text-emerald-700 font-mono bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+            Готов к отправке / печати
+          </span>
+        </div>
+      )}
+
       {/* PUBLISHED & REGISTERED STATUS BANNER */}
       {data.isPublished && (
         <div className="bg-emerald-900 text-white p-4 rounded-xl shadow-md border border-emerald-700 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-200">
@@ -295,16 +349,37 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
             </div>
           </div>
 
-          {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => onChange({ ...data, isPublished: false })}
-              className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-xs shrink-0"
+              onClick={() => {
+                const draftCopy: DocumentData = {
+                  ...data,
+                  id: `doc-${Date.now()}`,
+                  isPublished: false,
+                  refNumber: '',
+                  date: new Date().toLocaleDateString('ru-RU')
+                };
+                onChange(draftCopy);
+              }}
+              className="px-3.5 py-2 bg-white text-emerald-950 font-bold text-xs rounded-lg hover:bg-emerald-50 transition-all flex items-center gap-1.5 shadow-xs shrink-0"
+              title="Создать новую редактируемую версию на основе этого документа"
             >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Снять с публикации (Админ)</span>
+              <Copy className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Создать копию (черновик)</span>
             </button>
-          )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => onChange({ ...data, isPublished: false })}
+                className="px-3.5 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg transition-all flex items-center gap-1.5 shadow-xs shrink-0"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Снять с публикации (Админ)</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -394,79 +469,79 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
         </div>
 
         {/* PRESET CHIPS & FUNCTIONALITY ACCORDING TO RECIPIENT TYPE */}
-        {isInternal ? (
-          /* Internal Employee Quick Chips */
-          <div className="bg-indigo-50/50 border border-indigo-100 rounded-md p-2.5 space-y-2">
-            <div className="text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Users className="w-3.5 h-3.5 text-indigo-600" />
-                <span>Быстрый выбор сотрудника предприятия («Кому»):</span>
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {employeeList.slice(0, 6).map(emp => {
-                const pos = emp.dativePosition || emp.position;
-                const formattedPos = (emp.department && !pos.toLowerCase().includes(emp.department.toLowerCase()))
-                  ? `${pos} (${emp.department})`
-                  : pos;
-                return (
-                  <button
-                    key={emp.id}
-                    type="button"
-                    onClick={() => {
-                      onChange({
-                        ...data,
-                        recipient: {
-                          ...data.recipient,
-                          recipientType: 'internal',
-                          position: formattedPos,
-                          organization: emp.organization,
-                          name: emp.dativeName || emp.shortName,
-                          email: emp.email
-                        }
-                      });
-                    }}
-                    className="px-2 py-1 text-[11px] bg-white hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 font-medium rounded border border-indigo-200 transition-colors shadow-2xs"
-                  >
-                    {emp.shortName} ({emp.department})
-                  </button>
-                );
-              })}
-            </div>
+        <div className="bg-indigo-50/50 border border-indigo-100 rounded-md p-2.5 space-y-2">
+          <div className="text-[11px] font-semibold text-indigo-900 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Быстрый выбор адресата («Кому»):</span>
+            </span>
+            <span className="text-[10px] text-indigo-600 font-bold">Исключения для общей рассылки</span>
           </div>
-        ) : (
-          /* External Organization Presets */
-          <div className="bg-amber-50/50 border border-amber-200/70 rounded-md p-2.5 space-y-2">
-            <div className="text-[11px] font-semibold text-amber-900 flex items-center gap-1.5">
-              <Briefcase className="w-3.5 h-3.5 text-amber-600" />
-              <span>Быстрые шаблоны сторонних организаций и контрагентов:</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {EXTERNAL_COMPANY_PRESETS.map((comp, idx) => (
+          <div className="flex flex-wrap gap-1.5">
+            {/* Mass broadcast chip */}
+            <button
+              type="button"
+              onClick={() => {
+                if (isInternal) {
+                  onChange({
+                    ...data,
+                    recipient: {
+                      ...data.recipient,
+                      recipientType: 'internal',
+                      position: 'Всем сотрудникам компании',
+                      organization: 'АО «НПО «Тепломаш»',
+                      name: ''
+                    }
+                  });
+                } else {
+                  onChange({
+                    ...data,
+                    recipient: {
+                      ...data.recipient,
+                      recipientType: 'external',
+                      organization: 'Партнерам и контрагентам АО «НПО «Тепломаш»',
+                      position: 'Всем партнерам компании',
+                      name: ''
+                    }
+                  });
+                }
+              }}
+              className="px-2.5 py-1 text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded transition-colors shadow-2xs flex items-center gap-1 cursor-pointer"
+            >
+              <Users className="w-3.5 h-3.5 text-indigo-200" />
+              <span>{isInternal ? '👥 Всем сотрудникам компании' : '🌐 Всем партнерам компании'}</span>
+            </button>
+
+            {isInternal && employeeList.slice(0, 5).map(emp => {
+              const pos = emp.dativePosition || emp.position;
+              const formattedPos = (emp.department && !pos.toLowerCase().includes(emp.department.toLowerCase()))
+                ? `${pos} (${emp.department})`
+                : pos;
+              return (
                 <button
-                  key={idx}
+                  key={emp.id}
                   type="button"
                   onClick={() => {
                     onChange({
                       ...data,
                       recipient: {
-                        recipientType: 'external',
-                        organization: comp.org,
-                        position: comp.position,
-                        name: comp.name,
-                        address: comp.address,
-                        inn: comp.inn
+                        ...data.recipient,
+                        recipientType: 'internal',
+                        position: formattedPos,
+                        organization: emp.organization,
+                        name: emp.dativeName || emp.shortName,
+                        email: emp.email
                       }
                     });
                   }}
-                  className="px-2 py-1 text-[11px] bg-white hover:bg-amber-100 text-slate-700 hover:text-amber-900 font-medium rounded border border-amber-200 transition-colors shadow-2xs"
+                  className="px-2 py-1 text-[11px] bg-white hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 font-medium rounded border border-indigo-200 transition-colors shadow-2xs"
                 >
-                  {comp.org}
+                  {emp.shortName} ({emp.department})
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
 
         {/* INPUT FIELDS TAILORED FOR RECIPIENT TYPE */}
         <div className="space-y-3">
@@ -652,173 +727,141 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
             <div className="w-5 h-5 rounded-sm bg-indigo-50 text-indigo-600 flex items-center justify-center">
               <Calendar className="w-3.5 h-3.5" />
             </div>
-            <span>3. Дата, номер и место составления</span>
+            <span>3. Ссылка на входящий № и публикация</span>
           </div>
 
           <div className="flex items-center gap-1.5">
             {isAdmin ? (
               <span className="text-[10px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded flex items-center gap-1">
                 <Shield className="w-3 h-3 text-amber-600" />
-                Админ: Ручное редактирование разрешено
+                Админ
               </span>
             ) : (
               <span className="text-[10px] font-medium text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded flex items-center gap-1">
                 <Lock className="w-3 h-3 text-slate-400" />
-                Пользователь: Ручное редактирование заблокировано
+                Авто-нумерация
               </span>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                <span>Дата документа</span>
-                <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
-                  🔒 Фиксированная
-                </span>
-              </label>
-            </div>
-            <input
-              type="text"
-              value={data.date || new Date().toLocaleDateString('ru-RU')}
-              readOnly
-              disabled
-              placeholder={new Date().toLocaleDateString('ru-RU')}
-              className="w-full text-xs p-2.5 rounded border border-slate-200 bg-slate-100 text-slate-700 font-bold cursor-not-allowed select-none"
-            />
-            <p className="text-[10px] text-slate-500 mt-1">
-              Дата устанавливается автоматически равной текущей дате ({new Date().toLocaleDateString('ru-RU')}). Редактирование даты закрыто.
-            </p>
+        {/* Optional Inbound Reference Question & Input */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={data.showInRefNumber || false}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  onChange({
+                    ...data,
+                    showInRefNumber: checked,
+                    inRefNumber: checked ? data.inRefNumber : ''
+                  });
+                }}
+                className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+              />
+              <span className="text-xs font-semibold text-slate-800">
+                Указать ссылку на входящий номер (письмо-ответ)?
+              </span>
+            </label>
+            <span className="text-[11px] font-medium text-slate-500">
+              {data.showInRefNumber ? 'Включено' : 'Выключено'}
+            </span>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
-                <span>Исходящий / Регистрационный №</span>
-                {!isAdmin && <span title="Присваивается автоматически при публикации"><Lock className="w-3 h-3 text-amber-600" /></span>}
+          {data.showInRefNumber && (
+            <div className="space-y-1.5 animate-in fade-in duration-150 pl-1">
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
+                Ссылка на входящий №
               </label>
-            </div>
-            
-            <div className="relative">
               <input
                 type="text"
-                value={data.refNumber || (data.isPublished ? '' : 'Присваивается при публикации')}
-                readOnly
-                disabled
-                className="w-full text-xs p-2.5 rounded border border-indigo-200 bg-indigo-50/50 text-indigo-950 font-mono font-bold tracking-wide select-none cursor-not-allowed"
+                value={data.inRefNumber || ''}
+                onChange={(e) => onChange({ ...data, inRefNumber: e.target.value })}
+                placeholder="Например: На № 11/07 от 28.07.2026г."
+                className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans bg-white"
               />
-              <div className="absolute right-2.5 top-2.5 text-slate-400 pointer-events-none">
-                <Lock className="w-4 h-4 text-indigo-600/70" />
-              </div>
-            </div>
-            <p className="text-[10px] text-slate-500 mt-1">
-              {data.isPublished 
-                ? `Зафиксирован уникальный № ${data.refNumber} в Едином реестре`
-                : 'Номер генерируется автоматически из базы сотрудников и единого реестра при публикации'
-              }
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Ссылка на входящий №</label>
-            <input
-              type="text"
-              value={data.inRefNumber || ''}
-              onChange={(e) => !data.isPublished && onChange({ ...data, inRefNumber: e.target.value })}
-              readOnly={data.isPublished && !isAdmin}
-              placeholder="На № 11/07 от 28.07.2026г."
-              className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all disabled:bg-slate-100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Город / Место</label>
-            <input
-              type="text"
-              value={data.city}
-              onChange={(e) => !data.isPublished && onChange({ ...data, city: e.target.value })}
-              readOnly={data.isPublished && !isAdmin}
-              placeholder="г. Санкт-Петербург"
-              className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all disabled:bg-slate-100"
-            />
-          </div>
-        </div>
-
-        {/* AUTOMATIC DOCUMENT NUMBER GENERATOR PANEL */}
-        <div className="bg-indigo-50/70 border border-indigo-200 rounded-lg p-3.5 space-y-3 mt-2 shadow-2xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-2.5">
-            <div>
-              <div className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
-                <Hash className="w-4 h-4 text-indigo-600" />
-                <span>Автоматический генератор и реестр уникальных номеров</span>
-              </div>
-              <p className="text-[11px] text-slate-600 leading-normal mt-0.5">
-                Код подразделения и сквозной порядковый номер автоматически определяются из базы сотрудников
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setDeptCounters(getDeptCounters());
-                setRegistryList(getDocumentRegistry());
-                setIsCountersModalOpen(true);
-              }}
-              className="px-2.5 py-1 bg-white hover:bg-indigo-100 text-indigo-900 border border-indigo-200 rounded text-[11px] font-semibold flex items-center gap-1 transition-colors shadow-2xs"
-            >
-              <Database className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Единый реестр писем ({registryList.length})</span>
-            </button>
-          </div>
-
-          {/* COMPOSER / SENDER DETECTED INFO BAR */}
-          <div className="bg-white/90 border border-indigo-100 rounded-md p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-slate-600">Составитель из базы:</span>
-              <span className="font-bold text-slate-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                {data.signature.senderName || 'Не указан'} ({data.signature.senderDepartment || data.signature.senderPosition || 'Дирекция'})
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-slate-600">Авто-код подразделения:</span>
-              <span className="font-bold text-indigo-950 bg-indigo-100 px-2.5 py-0.5 rounded border border-indigo-200 font-mono">
-                [{selectedDeptCode}] — {DEPARTMENT_CODES.find(d => d.code === selectedDeptCode)?.name.split(',')[0]}
-              </span>
-            </div>
-          </div>
-
-          {/* NOTIFICATION FEEDBACK */}
-          {notifyMsg && (
-            <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold p-2.5 rounded-md flex items-center gap-2 animate-in fade-in duration-200">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>{notifyMsg}</span>
             </div>
           )}
+        </div>
 
-          {/* Action & Result Preview Bar */}
-          <div className="pt-2 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] text-slate-500 font-medium">Прогноз уникального регистрационного №:</span>
-              <span className="px-2.5 py-1 bg-indigo-950 text-indigo-100 font-mono text-xs font-bold rounded tracking-wider shadow-2xs">
-                {generateDocumentNumber(data.date || new Date().toLocaleDateString('ru-RU'), seqIndex, selectedDeptCode)}
-              </span>
+        {/* AUTOMATIC DOCUMENT NUMBER GENERATOR PANEL (ADMIN ONLY FULL PANEL vs REGULAR BADGE) */}
+        {!isAdmin ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-2xs mt-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center font-mono font-bold text-xs shrink-0">
+                №
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-800">
+                  Регистрационный номер документа
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  {data.isPublished
+                    ? `Зафиксирован в Едином реестре АО «НПО «Тепломаш»`
+                    : `Присваивается автоматически из единого реестра писем`}
+                </div>
+              </div>
             </div>
 
-            {!data.isPublished && (
-              <button
-                type="button"
-                onClick={handlePublishAndRegisterDocument}
-                className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-lg shadow-xs flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <Zap className="w-3.5 h-3.5 fill-amber-300 text-amber-300" />
-                <span>Опубликовать и занести в базу писем</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-mono font-extrabold text-indigo-950 bg-indigo-100/80 border border-indigo-200 px-3 py-1.5 rounded shadow-2xs">
+                {data.refNumber || generateDocumentNumber(data.date || new Date().toLocaleDateString('ru-RU'), seqIndex, selectedDeptCode)}
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-indigo-50/70 border border-indigo-200 rounded-lg p-3.5 space-y-3 mt-2 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-indigo-100 pb-2.5">
+              <div>
+                <div className="text-xs font-bold text-indigo-950 flex items-center gap-1.5">
+                  <Hash className="w-4 h-4 text-indigo-600" />
+                  <span>Автоматический генератор и реестр уникальных номеров</span>
+                </div>
+                <p className="text-[11px] text-slate-600 leading-normal mt-0.5">
+                  Код подразделения и сквозной порядковый номер автоматически определяются из базы сотрудников
+                </p>
+              </div>
+            </div>
+
+            {/* COMPOSER / SENDER DETECTED INFO BAR */}
+            <div className="bg-white/90 border border-indigo-100 rounded-md p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-slate-600">Составитель из базы:</span>
+                <span className="font-bold text-slate-900 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                  {data.signature.senderName || 'Не указан'} ({data.signature.senderDepartment || data.signature.senderPosition || 'Дирекция'})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-slate-600">Авто-код подразделения:</span>
+                <span className="font-bold text-indigo-950 bg-indigo-100 px-2.5 py-0.5 rounded border border-indigo-200 font-mono">
+                  [{selectedDeptCode}] — {DEPARTMENT_CODES.find(d => d.code === selectedDeptCode)?.name.split(',')[0]}
+                </span>
+              </div>
+            </div>
+
+            {/* NOTIFICATION FEEDBACK */}
+            {notifyMsg && (
+              <div className="bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold p-2.5 rounded-md flex items-center gap-2 animate-in fade-in duration-200">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{notifyMsg}</span>
+              </div>
+            )}
+
+            {/* Action & Result Preview Bar */}
+            <div className="pt-2 border-t border-indigo-100 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-medium">Прогноз уникального регистрационного №:</span>
+                <span className="px-2.5 py-1 bg-indigo-950 text-indigo-100 font-mono text-xs font-bold rounded tracking-wider shadow-2xs">
+                  {generateDocumentNumber(data.date || new Date().toLocaleDateString('ru-RU'), seqIndex, selectedDeptCode)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* REGISTRY / COUNTERS MODAL */}
         {isCountersModalOpen && (
@@ -875,10 +918,7 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                     type="button"
                     onClick={() => {
                       if (!isAdmin) {
-                        if (confirm('Редактирование сквозных номеров доступно только Администратору. Авторизоваться?')) {
-                          setIsCountersModalOpen(false);
-                          onRequestAdminAuth?.();
-                        }
+                        alert('Редактирование счетчиков доступно только Администратору.');
                         return;
                       }
                       setActiveModalTab('counters');
@@ -899,20 +939,6 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                     </span>
                   </button>
                 </div>
-
-                {!isAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsCountersModalOpen(false);
-                      onRequestAdminAuth?.();
-                    }}
-                    className="text-[11px] font-semibold text-indigo-700 hover:text-indigo-900 flex items-center gap-1 bg-white px-2 py-1 rounded border border-indigo-200 hover:bg-indigo-50 transition-colors"
-                  >
-                    <KeyRound className="w-3 h-3 text-indigo-600" />
-                    <span>Войти как Администратор</span>
-                  </button>
-                )}
               </div>
 
               {/* Modal Content Body */}
@@ -931,22 +957,6 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                           className="w-full text-xs pl-8 pr-3 py-2 rounded-lg border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none"
                         />
                       </div>
-
-                      {isAdmin && registryList.length > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (confirm('Вы уверены, что хотите полностью очистить весь журнал писем?')) {
-                              clearDocumentRegistryDb();
-                              setRegistryList([]);
-                            }
-                          }}
-                          className="px-2.5 py-1.5 text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-colors flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Очистить базу</span>
-                        </button>
-                      )}
                     </div>
 
                     {/* Registry Entries Table / List */}
@@ -973,50 +983,161 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                           })
                           .map((doc) => (
                             <div key={doc.id} className="p-3 bg-slate-50 hover:bg-indigo-50/40 border border-slate-200 rounded-lg transition-colors flex flex-wrap items-center justify-between gap-2">
-                              <div className="space-y-1 flex-1 min-w-[240px]">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="px-2.5 py-0.5 bg-indigo-950 text-indigo-100 font-mono font-bold text-xs rounded tracking-wider">
-                                    № {doc.regNumber}
-                                  </span>
-                                  <span className="text-xs font-semibold text-slate-700">
-                                    от {doc.date}
-                                  </span>
-                                  <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-medium">
-                                    {doc.deptName}
-                                  </span>
+                              {editingDocId === doc.id && editingDocData ? (
+                                <div className="w-full bg-indigo-50/90 border border-indigo-300 rounded-lg p-3 space-y-2.5">
+                                  <div className="text-xs font-bold text-indigo-950 flex items-center justify-between border-b border-indigo-200 pb-1.5">
+                                    <span>Редактирование записи № {doc.regNumber} (Администратор)</span>
+                                    <span className="text-[10px] text-indigo-600 font-mono">ID: {doc.id}</span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-700">Рег. номер:</label>
+                                      <input
+                                        type="text"
+                                        value={editingDocData.regNumber}
+                                        onChange={(e) => setEditingDocData({ ...editingDocData, regNumber: e.target.value })}
+                                        className="w-full text-xs p-1.5 rounded border border-slate-300 font-mono font-bold bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-700">Дата документа:</label>
+                                      <input
+                                        type="text"
+                                        value={editingDocData.date}
+                                        onChange={(e) => setEditingDocData({ ...editingDocData, date: e.target.value })}
+                                        className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-700">Подразделение:</label>
+                                      <input
+                                        type="text"
+                                        value={editingDocData.composerDept}
+                                        onChange={(e) => setEditingDocData({ ...editingDocData, composerDept: e.target.value })}
+                                        className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-700">Составитель (ФИО):</label>
+                                      <input
+                                        type="text"
+                                        value={editingDocData.composerName}
+                                        onChange={(e) => setEditingDocData({ ...editingDocData, composerName: e.target.value })}
+                                        className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="text-[10px] font-bold text-slate-700">Получатель (Адресат):</label>
+                                      <input
+                                        type="text"
+                                        value={editingDocData.recipientName}
+                                        onChange={(e) => setEditingDocData({ ...editingDocData, recipientName: e.target.value })}
+                                        className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <label className="text-[10px] font-bold text-slate-700">Тема документа / Заголовок:</label>
+                                    <input
+                                      type="text"
+                                      value={editingDocData.subject}
+                                      onChange={(e) => setEditingDocData({ ...editingDocData, subject: e.target.value })}
+                                      className="w-full text-xs p-1.5 rounded border border-slate-300 bg-white focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-indigo-200">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingDocId(null);
+                                        setEditingDocData(null);
+                                      }}
+                                      className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                      Отмена
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        if (editingDocData) {
+                                          updateRegisteredDocumentInDb(editingDocData);
+                                          setRegistryList(getDocumentRegistry());
+                                          setEditingDocId(null);
+                                          setEditingDocData(null);
+                                        }
+                                      }}
+                                      className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <Check className="w-3.5 h-3.5" />
+                                      Сохранить
+                                    </button>
+                                  </div>
                                 </div>
+                              ) : (
+                                <>
+                                  <div className="space-y-1 flex-1 min-w-[240px]">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="px-2.5 py-0.5 bg-indigo-950 text-indigo-100 font-mono font-bold text-xs rounded tracking-wider">
+                                        № {doc.regNumber}
+                                      </span>
+                                      <span className="text-xs font-semibold text-slate-700">
+                                        от {doc.date}
+                                      </span>
+                                      <span className="text-[10px] bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                                        {doc.deptName}
+                                      </span>
+                                    </div>
 
-                                <div className="text-xs text-slate-800 font-medium">
-                                  <span className="text-slate-500 font-normal">Тема:</span> {doc.subject}
-                                </div>
+                                    <div className="text-xs text-slate-800 font-medium">
+                                      <span className="text-slate-500 font-normal">Тема:</span> {doc.subject}
+                                    </div>
 
-                                <div className="text-[11px] text-slate-500 flex items-center gap-3 flex-wrap">
-                                  <span>Составитель: <strong className="text-slate-700">{doc.composerName}</strong> ({doc.composerDept})</span>
-                                  <span>Получатель: <strong className="text-slate-700">{doc.recipientName}</strong></span>
-                                </div>
-                              </div>
+                                    <div className="text-[11px] text-slate-500 flex items-center gap-3 flex-wrap">
+                                      <span>Составитель: <strong className="text-slate-700">{doc.composerName}</strong> ({doc.composerDept})</span>
+                                      <span>Получатель: <strong className="text-slate-700">{doc.recipientName}</strong></span>
+                                    </div>
+                                  </div>
 
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-400">
-                                  {doc.registeredAt}
-                                </span>
+                                  <div className="flex items-center gap-2">
+                                    {isAdmin && doc.digitalSignatureKey && (
+                                      <span className="px-2 py-0.5 text-indigo-950 bg-indigo-50 border border-indigo-200 rounded font-mono font-bold text-[10px] shadow-2xs" title="Уникальный ключ электронной подписи (виден только администратору)">
+                                        Ключ ЭП: {doc.digitalSignatureKey}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-slate-400">
+                                      {doc.registeredAt}
+                                    </span>
 
-                                {isAdmin && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      if (confirm(`Удалить регистрационный № ${doc.regNumber} из базы?`)) {
-                                        deleteRegisteredDocumentFromDb(doc.id);
-                                        setRegistryList(getDocumentRegistry());
-                                      }
-                                    }}
-                                    className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                    title="Удалить номер из реестра"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
+                                    {isAdmin && (
+                                      <div className="flex items-center gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setEditingDocId(doc.id);
+                                            setEditingDocData({ ...doc });
+                                          }}
+                                          className="px-2 py-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded transition-colors flex items-center gap-1 text-[11px] font-bold"
+                                          title="Редактировать запись в реестре"
+                                        >
+                                          <Pencil className="w-3.5 h-3.5" />
+                                          <span>Редактировать</span>
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              )}
                             </div>
                           ))}
                       </div>
@@ -1026,25 +1147,14 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                   /* TAB 2: COUNTER EDITOR (ADMIN ONLY) */
                   <div className="space-y-4">
                     {!isAdmin ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center space-y-3">
-                        <Lock className="w-8 h-8 text-amber-600 mx-auto" />
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center space-y-2">
+                        <Lock className="w-8 h-8 text-slate-400 mx-auto" />
                         <div>
-                          <h4 className="font-bold text-amber-950 text-sm">Доступ ограничен</h4>
-                          <p className="text-xs text-amber-800 mt-1 max-w-md mx-auto">
+                          <h4 className="font-bold text-slate-800 text-sm">Доступ ограничен</h4>
+                          <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                             Редактирование счетчиков сквозной нумерации писем доступно только Администратору. Обычные пользователи могут регистрировать письма в автоматическом режиме.
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsCountersModalOpen(false);
-                            onRequestAdminAuth?.();
-                          }}
-                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1.5"
-                        >
-                          <KeyRound className="w-3.5 h-3.5" />
-                          <span>Войти как Администратор</span>
-                        </button>
                       </div>
                     ) : (
                       <>
@@ -1211,34 +1321,102 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
       {/* 5. PUBLISH DOCUMENT ACTION CARD */}
       <div className="bg-slate-900 text-white rounded-xl p-5 space-y-4 shadow-lg border border-slate-800">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <Send className="w-5 h-5 text-emerald-400" />
               <h3 className="font-bold text-sm text-white">5. Публикация и регистрация документа в базе</h3>
             </div>
             <p className="text-xs text-slate-300 max-w-xl leading-relaxed">
-              При нажатии «Опубликовать» письму автоматически присваивается уникальный регистрационный номер из Единого реестра (учитывая текущую дату и код подразделения), и оно сохраняется в базу писем. Редактирование после публикации закрыто.
+              При нажатии «Опубликовать и занести в базу писем» письму автоматически присваивается уникальный регистрационный номер из Единого реестра (с учетом даты и подразделения), письмо заносится в реестр, а все поля формы сбрасываются для составления нового документа.
             </p>
           </div>
 
-          {!data.isPublished ? (
-            <button
-              type="button"
-              onClick={handlePublishAndRegisterDocument}
-              className="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer"
-            >
-              <Zap className="w-4 h-4 fill-slate-950 text-slate-950" />
-              <span>Опубликовать и занести в базу писем</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-2 text-emerald-300 font-bold text-xs bg-emerald-950/80 px-4 py-2.5 rounded-xl border border-emerald-800">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Документ зарегистрирован под № {data.refNumber}</span>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={handlePublishAndRegisterDocument}
+            className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-2 shrink-0 cursor-pointer"
+          >
+            <Zap className="w-4 h-4 fill-slate-950 text-slate-950" />
+            <span>Опубликовать и занести в базу писем</span>
+          </button>
         </div>
+
+        {/* NOTIFICATION FEEDBACK MESSAGE AT THE BOTTOM */}
+        {notifyMsg && (
+          <div className={`p-3 rounded-lg text-xs font-bold flex items-center gap-2 animate-in fade-in duration-200 ${
+            notifyMsg.startsWith('ОШИБКА') 
+              ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' 
+              : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+          }`}>
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span>{notifyMsg}</span>
+          </div>
+        )}
       </div>
+
+      {/* PREVIEW WARNING CONFIRMATION MODAL */}
+      {isPublishConfirmOpen && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-150 p-6 space-y-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center shrink-0 shadow-2xs">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900">
+                  Подтверждение публикации
+                </h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  Вы уверены, что хотите занести данный документ в Единый реестр писем АО «НПО «Тепломаш»?
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 text-xs text-slate-700 space-y-2 leading-relaxed">
+              <div className="font-bold text-amber-950 flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-amber-600" />
+                <span>Что произойдет при нажатии «Опубликовать»:</span>
+              </div>
+              <ul className="space-y-1.5 text-slate-700 text-[11px] pl-1">
+                <li className="flex items-start gap-1.5">
+                  <span className="text-amber-600 font-bold">•</span>
+                  <span>Документу присвоится номер: <strong className="font-mono text-indigo-950 font-bold bg-indigo-100 px-1.5 py-0.5 rounded border border-indigo-200">№ {data.refNumber || generateDocumentNumber(data.date || new Date().toLocaleDateString('ru-RU'), seqIndex, selectedDeptCode)}</strong></span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-amber-600 font-bold">•</span>
+                  <span>Запись о документе будет <strong>зафиксирована в реестре</strong>.</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-amber-600 font-bold">•</span>
+                  <span>Все поля формы будут <strong>автоматически сброшены</strong> для ввода следующего обращения.</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsPublishConfirmOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPublishConfirmOpen(false);
+                  executeRegistration();
+                }}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white text-xs font-extrabold rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <Zap className="w-4 h-4 fill-amber-300 text-amber-300" />
+                <span>Да, опубликовать</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
