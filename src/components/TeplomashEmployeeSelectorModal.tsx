@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { TEPLOMASH_EMPLOYEES, DEFAULT_TEPLOMASH_EMPLOYEES, TeplomashEmployee, sanitizeEmployeeDepartments } from '../constants/teplomashEmployees';
+import { TEPLOMASH_EMPLOYEES, TeplomashEmployee, sanitizeEmployeeDepartments } from '../constants/teplomashEmployees';
 import { 
   X, 
   Search, 
@@ -146,12 +146,12 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
 
   const handleResetDefaults = () => {
     if (window.confirm('Восстановить эталонный справочник сотрудников Тепломаш по умолчанию?')) {
-      const sanitizedDefaults = sanitizeEmployeeDepartments(DEFAULT_TEPLOMASH_EMPLOYEES);
+      const sanitizedDefaults = sanitizeEmployeeDepartments(TEPLOMASH_EMPLOYEES);
       onUpdateEmployees(sanitizedDefaults);
       try {
         localStorage.setItem('teplomash_employees_db', JSON.stringify(sanitizedDefaults));
       } catch (e) { console.error(e); }
-      setImportStatus({ type: 'success', message: 'Эталонный список сотрудников Тепломаш успешно восстановлен.' });
+      setImportStatus({ type: 'success', message: 'Справочник сотрудников Тепломаш успешно сброшен.' });
     }
   };
 
