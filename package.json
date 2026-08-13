@@ -43,8 +43,7 @@
     "pdf-lib": "^1.17.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "vite": "^6.2.3",
-    "xlsx": "^0.18.5"
+    "vite": "^6.2.3"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

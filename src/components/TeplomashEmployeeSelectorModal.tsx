@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee, sanitizeEmployeeDepartments } from '../constants/teplomashEmployees';
 import { 
   X, 
@@ -12,18 +12,12 @@ import {
   Plus, 
   Edit2, 
   Trash2, 
-  Upload, 
-  Download, 
-  FileSpreadsheet, 
   RefreshCw, 
   Database, 
   AlertCircle,
-  FileDown,
   Lock,
-  KeyRound,
   Shield
 } from 'lucide-react';
-import { parseExcelOrCsv, exportToExcelFile } from '../utils/excelUtils';
 
 interface TeplomashEmployeeSelectorModalProps {
   isOpen: boolean;
@@ -194,188 +188,6 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
     });
   };
 
-  // Excel Import Handler
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const bstr = evt.target?.result;
-        if (!bstr) return;
-        const rawData = await parseExcelOrCsv(bstr);
-
-        if (rawData.length === 0) {
-          setImportStatus({ type: 'error', message: 'Файл Excel пуст или не содержит данных.' });
-          return;
-        }
-
-        const newEmployees: TeplomashEmployee[] = [];
-
-        rawData.forEach((row, idx) => {
-          const normalizedRow: Record<string, string> = {};
-          Object.keys(row).forEach(key => {
-            const cleanKey = key
-              .toString()
-              .replace(/\u00a0/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-              .toLowerCase();
-            const cleanVal = String(row[key] ?? '')
-              .replace(/\u00a0/g, ' ')
-              .trim();
-            normalizedRow[cleanKey] = cleanVal;
-          });
-
-          const getValue = (...possibleKeys: string[]) => {
-            for (const k of possibleKeys) {
-              if (normalizedRow[k]) return normalizedRow[k];
-            }
-            return '';
-          };
-
-          const getFullName = () => {
-            const direct = getValue(
-              'фио', 'ф.и.о.', 'фио полностью', 'ф и о', 'сотрудник', 'работник',
-              'fullname', 'name', 'имя', 'fio', 'сотрудник фио'
-            );
-            if (direct) return direct;
-            for (const [k, v] of Object.entries(normalizedRow)) {
-              if (v && (k.includes('фио') || k.includes('сотрудник') || k.includes('работник')) && !k.includes('кратк')) {
-                return v;
-              }
-            }
-            return '';
-          };
-
-          const getPosition = () => {
-            const direct = getValue(
-              'должность', 'профессия', 'специальность', 'position', 'job', 'title', 'должность сотрудника'
-            );
-            if (direct) return direct;
-            for (const [k, v] of Object.entries(normalizedRow)) {
-              if (v && (k.includes('должност') || k.includes('професс'))) {
-                return v;
-              }
-            }
-            return '';
-          };
-
-          const getDepartment = () => {
-            const direct = getValue(
-              'подразделение', 'подразделения', 'структурное подразделение',
-              'наименование подразделения', 'название подразделения',
-              'подразделение сотрудника', 'отдел', 'отделы', 'департамент',
-              'department', 'dept', 'unit'
-            );
-            if (direct) return direct;
-            return '';
-          };
-
-          const fullName = getFullName();
-          const position = getPosition();
-
-          if (!fullName && !position) return;
-
-          const shortName = getValue('инициалы', 'фио кратко', 'shortname') || generateShortName(fullName || 'Сотрудник');
-          const dativeName = getValue('фио в дательном падеже', 'фио в дательном', 'dativename') || shortName;
-          const dativePosition = getValue('должность в дательном падеже', 'должность в дательном', 'dativeposition') || position;
-          const department = getDepartment() || 'Отдел продаж';
-          const organization = getValue('организация', 'компания', 'organization') || 'АО «НПО «Тепломаш»';
-          const email = getValue('email', 'e-mail', 'почта') || '';
-          const phone = getValue('телефон', 'тел', 'phone') || '';
-
-          newEmployees.push({
-            id: 'emp-excel-' + Date.now() + '-' + idx,
-            fullName: fullName || shortName,
-            shortName,
-            dativeName,
-            position,
-            dativePosition,
-            department,
-            organization,
-            email,
-            phone
-          });
-        });
-
-        if (newEmployees.length === 0) {
-          setImportStatus({ type: 'error', message: 'Не удалось распознать строки сотрудников из файла Excel.' });
-          return;
-        }
-
-        const shouldReplace = window.confirm(`Успешно распознано сотрудников: ${newEmployees.length}.\n\nНажмите «ОК» чтобы ЗАМЕНИТЬ всю базу данными из Excel.\nНажмите «Отмена» чтобы ДОБАВИТЬ их к существующей базе.`);
-
-        let updated: TeplomashEmployee[];
-        if (shouldReplace) {
-          updated = newEmployees;
-        } else {
-          updated = [...newEmployees, ...employees];
-        }
-
-        onUpdateEmployees(sanitizeEmployeeDepartments(updated));
-        setImportStatus({ 
-          type: 'success', 
-          message: `Успешно загружено ${newEmployees.length} сотрудников из файла «${file.name}»!` 
-        });
-
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      } catch (err) {
-        console.error('Error parsing Excel file:', err);
-        setImportStatus({ type: 'error', message: 'Ошибка при чтении файла Excel.' });
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // Excel Export Handler
-  const handleExportExcel = async () => {
-    const exportData = employees.map(emp => ({
-      'ФИО полностью': emp.fullName,
-      'Инициалы (ФИО кратко)': emp.shortName,
-      'ФИО в дательном падеже': emp.dativeName,
-      'Должность': emp.position,
-      'Должность в дательном падеже': emp.dativePosition,
-      'Отдел / Подразделение': emp.department,
-      'Организация': emp.organization,
-      'Email': emp.email,
-      'Телефон': emp.phone
-    }));
-
-    await exportToExcelFile(exportData, `База_Сотрудников_Тепломаш_${new Date().toISOString().slice(0,10)}.xlsx`, 'Сотрудники');
-  };
-
-  // Excel Template Download Handler
-  const handleDownloadTemplate = async () => {
-    const sampleData = [
-      {
-        'ФИО полностью': 'Иванов Иван Иванович',
-        'Инициалы (ФИО кратко)': 'И.И. Иванов',
-        'ФИО в дательном падеже': 'Иванову И. И.',
-        'Должность': 'Инженер-конструктор',
-        'Должность в дательном падеже': 'Инженеру-конструктору',
-        'Отдел / Подразделение': 'Конструкторское бюро',
-        'Организация': 'АО «НПО «Тепломаш»',
-        'Email': 'ivanov@teplomash.ru',
-        'Телефон': '+7 (812) 301-99-40 (доб. 312)'
-      },
-      {
-        'ФИО полностью': 'Петрова Анна Сергеевна',
-        'Инициалы (ФИО кратко)': 'А.С. Петрова',
-        'ФИО в дательном падеже': 'Петровой А. С.',
-        'Должность': 'Специалист по кадрам',
-        'Должность в дательном падеже': 'Специалисту по кадрам',
-        'Отдел / Подразделение': 'Отдел кадров',
-        'Организация': 'АО «НПО «Тепломаш»',
-        'Email': 'petrova@teplomash.ru',
-        'Телефон': '+7 (812) 301-99-40 (доб. 106)'
-      }
-    ];
-
-    await exportToExcelFile(sampleData, 'Шаблон_Загрузки_Сотрудников_Тепломаш.xlsx', 'Шаблон_Сотрудники');
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 overflow-y-auto animate-fade-in">
       <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh]">
@@ -513,21 +325,9 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
                   <span className="hidden sm:inline">Добавить сотрудника</span>
                 </button>
               )}
-
-              <button
-                type="button"
-                onClick={handleExportExcel}
-                className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-lg transition-colors border border-indigo-200"
-                title="Экспортировать текущий список сотрудников в Excel"
-              >
-                <FileSpreadsheet className="w-4 h-4 text-indigo-600" />
-                <span className="hidden sm:inline">Экспорт в Excel</span>
-              </button>
             </div>
           </div>
         </div>
-
-
 
         {/* Content Area */}
         <div className="p-4 overflow-y-auto flex-1 space-y-3">
@@ -555,9 +355,11 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
                           <span className="font-bold text-xs text-slate-900 group-hover:text-indigo-600 transition-colors">
                             {emp.fullName}
                           </span>
-                          <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium border border-slate-200">
-                            {emp.department}
-                          </span>
+                          {emp.department && (
+                            <span className="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium border border-slate-200">
+                              {emp.department}
+                            </span>
+                          )}
                         </div>
 
                         <div className="text-xs font-medium text-slate-700">
@@ -642,7 +444,7 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
             </div>
           )}
 
-          {/* TAB 2: DATABASE MANAGEMENT & EXCEL TOOLS */}
+          {/* TAB 2: DATABASE MANAGEMENT & TMDATA INTEGRATION */}
           {activeTab === 'manage' && (
             <div className="space-y-4">
               
@@ -650,53 +452,15 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
               <div className="bg-gradient-to-r from-slate-50 to-indigo-50/40 border border-slate-200 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="text-xs font-bold text-slate-800 flex items-center gap-2">
-                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                    <span>Управление базой данных сотрудников Тепломаш</span>
+                    <Database className="w-4 h-4 text-indigo-600" />
+                    <span>Справочник сотрудников Тепломаш (синхронизация с tmdata/)</span>
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    {isAdmin 
-                      ? 'Загружайте Excel (.xlsx) для авто-импорта, редактируйте записи или сбрасывайте к эталону.'
-                      : 'Экспортируйте базу сотрудников в Excel (.xlsx) или скачивайте шаблон для сверки.'}
+                    База данных сотрудников загружается из каталога tmdata/ и обновляется автоматически.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleDownloadTemplate}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 font-semibold text-xs rounded-md border border-slate-300 transition-colors shadow-2xs"
-                  >
-                    <FileDown className="w-3.5 h-3.5 text-indigo-600" />
-                    Скачать шаблон
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleExportExcel}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold text-xs rounded-md border border-indigo-200 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    Экспорт в Excel
-                  </button>
-
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    accept=".xlsx, .xls, .csv"
-                    className="hidden"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-md shadow-2xs transition-colors"
-                    title="Загрузить новый список сотрудников из Excel файла"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    Загрузить Excel (.xlsx)
-                  </button>
-
                   <button
                     type="button"
                     onClick={handleResetDefaults}
@@ -704,7 +468,7 @@ export const TeplomashEmployeeSelectorModal: React.FC<TeplomashEmployeeSelectorM
                     title="Восстановить эталонный список сотрудников Тепломаш"
                   >
                     <RefreshCw className="w-3.5 h-3.5 text-indigo-600" />
-                    Восстановить эталон
+                    Обновить из tmdata/
                   </button>
 
                   <button
