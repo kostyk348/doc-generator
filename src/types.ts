@@ -94,10 +94,13 @@ export interface DocumentData {
 }
 
 export interface DocumentVersion {
+  id?: string;
   version: string; // e.g. '1.0', '1.1', '2.0'
   timestamp: string; // ISO or formatted date
+  createdAt?: string; // alias for timestamp
   comment?: string; // e.g. "Добавлены реквизиты", "Исправлен текст"
   updatedBy?: string;
+  author?: string; // alias for updatedBy
   dataSnapshot: DocumentData;
 }
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { DocumentData, DocumentPreset } from './types';
+import { DocumentData, DocumentPreset, DocumentVersion } from './types';
 import { INITIAL_DOCUMENT, TEPLOMASH_OFFICIAL_HEADER_URL } from './constants/presets';
 import { DocumentForm } from './components/DocumentForm';
 import { SignatureSettings } from './components/SignatureSettings';
@@ -260,10 +260,12 @@ export default function App() {
     const currentSnapshot: DocumentData = JSON.parse(JSON.stringify(docData));
     currentSnapshot.version = newVersion;
 
-    const newVersionRecord = {
+    const newVersionRecord: DocumentVersion = {
       id: `ver-${Date.now()}`,
       version: newVersion,
+      timestamp: nowStr,
       createdAt: nowStr,
+      updatedBy: docData.signature.senderName || 'Пользователь',
       author: docData.signature.senderName || 'Пользователь',
       comment: comment || (bumpType === 'major' ? 'Новая редакция документа' : bumpType === 'minor' ? 'Корректировка документа' : 'Сохранение копии'),
       dataSnapshot: currentSnapshot
