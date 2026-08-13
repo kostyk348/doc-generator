@@ -10,9 +10,9 @@ export interface FioDeclensionResult {
 }
 
 /**
-  * Universal Russian Pluralization helper for counters.
-  * Example: pluralize(5, ['документ', 'документа', 'документов']) -> "5 документов"
-  */
+ * Universal Russian Pluralization helper for counters.
+ * Example: pluralize(5, ['документ', 'документа', 'документов']) -> "5 документов"
+ */
 export function pluralizeNoun(count: number, forms: [string, string, string]): string {
   const absCount = Math.abs(count) % 100;
   const lastDigit = absCount % 10;
@@ -30,7 +30,7 @@ export function pluralizeNoun(count: number, forms: [string, string, string]): s
 }
 
 /**
- * Detects gender from patronymic or first name
+ * Detects gender from patronymic, first name, or surname
  */
 export function detectGender(fullName: string): 'male' | 'female' | 'unknown' {
   const clean = fullName.trim();
@@ -38,24 +38,36 @@ export function detectGender(fullName: string): 'male' | 'female' | 'unknown' {
 
   for (const part of parts) {
     const lower = part.toLowerCase();
-    if (lower.endsWith('вич') || lower.endsWith('лич')) return 'male';
-    if (lower.endsWith('вна') || lower.endsWith('чна')) return 'female';
+    if (lower.endsWith('вич') || lower.endsWith('лич') || lower.endsWith('вичу') || lower.endsWith('личем')) return 'male';
+    if (lower.endsWith('вна') || lower.endsWith('чна') || lower.endsWith('вне') || lower.endsWith('чной')) return 'female';
   }
 
   // Check last names
   for (const part of parts) {
     const lower = part.toLowerCase();
-    if (lower.endsWith('ов') || lower.endsWith('ев') || lower.endsWith('ин') || lower.endsWith('ский') || lower.endsWith('цкий')) return 'male';
-    if (lower.endsWith('ова') || lower.endsWith('ева') || lower.endsWith('ина') || lower.endsWith('ская') || lower.endsWith('цкая')) return 'female';
+    if (
+      lower.endsWith('ов') || lower.endsWith('ев') || lower.endsWith('ин') || lower.endsWith('ын') ||
+      lower.endsWith('ский') || lower.endsWith('цкий') ||
+      lower.endsWith('ову') || lower.endsWith('еву') || lower.endsWith('ину') || lower.endsWith('скому')
+    ) {
+      return 'male';
+    }
+    if (
+      lower.endsWith('ова') || lower.endsWith('ева') || lower.endsWith('ина') || lower.endsWith('ына') ||
+      lower.endsWith('ская') || lower.endsWith('цкая') ||
+      lower.endsWith('овой') || lower.endsWith('евой') || lower.endsWith('иной') || lower.endsWith('ской')
+    ) {
+      return 'female';
+    }
   }
 
   // Check first names
-  if (parts.length >= 2) {
-    const firstName = parts[1].toLowerCase();
-    if (['анна', 'елена', 'ирина', 'ольга', 'татьяна', 'мария', 'наталья', 'екатерина', 'светлана', 'юлия', 'анастасия', 'виктория', 'дарья', 'евгения', 'марина', 'надежда', 'любовь'].includes(firstName)) {
+  for (const part of parts) {
+    const lower = part.toLowerCase();
+    if (['анна', 'елена', 'ирина', 'ольга', 'татьяна', 'мария', 'наталья', 'екатерина', 'светлана', 'юлия', 'анастасия', 'виктория', 'дарья', 'евгения', 'марина', 'надежда', 'любовь', 'анне', 'елене', 'ирине', 'ольге', 'татьяне', 'марии', 'наталье', 'екатерине', 'светлане', 'юлии'].includes(lower)) {
       return 'female';
     }
-    if (['иван', 'александр', 'сергей', 'дмитрий', 'андрей', 'алексей', 'михаил', 'павел', 'евгений', 'роман', 'денис', 'артем', 'владимир', 'николай', 'виктор'].includes(firstName)) {
+    if (['иван', 'александр', 'сергей', 'дмитрий', 'андрей', 'алексей', 'михаил', 'павел', 'евгений', 'роман', 'денис', 'артем', 'владимир', 'николай', 'виктор', 'ивану', 'александру', 'сергею', 'дмитрию', 'андрею', 'алексею', 'михаилу', 'павлу', 'евгению', 'роману', 'денису', 'артему', 'владимиру', 'николаю', 'виктору'].includes(lower)) {
       return 'male';
     }
   }
@@ -66,9 +78,15 @@ export function detectGender(fullName: string): 'male' | 'female' | 'unknown' {
 /**
  * Declines male/female surnames according to Russian grammar rules
  */
-function declineSurname(surname: string, targetCase: GrammarCase, gender: 'male' | 'female' | 'unknown'): string {
+export function declineSurname(surname: string, targetCase: GrammarCase, gender: 'male' | 'female' | 'unknown'): string {
   if (!surname) return '';
   const s = surname.trim();
+
+  // Hyphenated surname handling (e.g. Иванов-Сидоров)
+  if (s.includes('-')) {
+    return s.split('-').map(part => declineSurname(part, targetCase, gender)).join('-');
+  }
+
   const lower = s.toLowerCase();
 
   // Non-declinable surnames (e.g. Шевченко, Бойко, Седых, Глухих, Живаго, Дюма)
@@ -88,6 +106,16 @@ function declineSurname(surname: string, targetCase: GrammarCase, gender: 'male'
   }
 
   if (targetCase === 'nominative') return s;
+
+  // Already in Dative check
+  if (targetCase === 'dative') {
+    if (lower.endsWith('ову') || lower.endsWith('еву') || lower.endsWith('ину') || lower.endsWith('ыну') || lower.endsWith('скому') || lower.endsWith('цкому')) {
+      return s;
+    }
+    if (lower.endsWith('овой') || lower.endsWith('евой') || lower.endsWith('иной') || lower.endsWith('ыной') || lower.endsWith('ской') || lower.endsWith('цкой')) {
+      return s;
+    }
+  }
 
   const isFemale = gender === 'female' || lower.endsWith('а') || lower.endsWith('я');
 
@@ -169,14 +197,24 @@ function declineSurname(surname: string, targetCase: GrammarCase, gender: 'male'
 /**
  * Declines Russian First Name
  */
-function declineFirstName(firstName: string, targetCase: GrammarCase, gender: 'male' | 'female' | 'unknown'): string {
+export function declineFirstName(firstName: string, targetCase: GrammarCase, gender: 'male' | 'female' | 'unknown'): string {
   if (!firstName) return '';
   const fn = firstName.trim();
   const lower = fn.toLowerCase();
 
   // Initials (e.g., "А.", "И.") remain unchanged
-  if (/^[а-яа-зa-z]\.$/i.test(fn)) return fn;
+  if (/^[а-яёa-z]\.?$/i.test(fn)) return fn;
   if (targetCase === 'nominative') return fn;
+
+  // Already in Dative check
+  if (targetCase === 'dative') {
+    if (['александру', 'ивану', 'роману', 'сергею', 'дмитрию', 'андрею', 'алексею', 'михаилу', 'павлу', 'евгению', 'денису', 'артему', 'владимиру', 'николаю', 'виктору'].includes(lower)) {
+      return fn;
+    }
+    if (['анне', 'елене', 'ирине', 'ольге', 'татьяне', 'марии', 'наталье', 'екатерине', 'светлане', 'юлии', 'анастасии', 'виктории', 'дарье', 'евгении', 'марине', 'надежде'].includes(lower)) {
+      return fn;
+    }
+  }
 
   const isFemale = gender === 'female' || ['а', 'я'].includes(lower.slice(-1));
 
@@ -287,14 +325,21 @@ function declineFirstName(firstName: string, targetCase: GrammarCase, gender: 'm
 /**
  * Declines Russian Patronymic (Отчество)
  */
-function declinePatronymic(patronymic: string, targetCase: GrammarCase): string {
+export function declinePatronymic(patronymic: string, targetCase: GrammarCase): string {
   if (!patronymic) return '';
   const pat = patronymic.trim();
   const lower = pat.toLowerCase();
 
   // Initials (e.g. "А.", "И.") remain unchanged
-  if (/^[а-яа-зa-z]\.$/i.test(pat)) return pat;
+  if (/^[а-яёa-z]\.?$/i.test(pat)) return pat;
   if (targetCase === 'nominative') return pat;
+
+  // Already in Dative check
+  if (targetCase === 'dative') {
+    if (lower.endsWith('вичу') || lower.endsWith('личу') || lower.endsWith('вне') || lower.endsWith('чне')) {
+      return pat;
+    }
+  }
 
   if (lower.endsWith('вич') || lower.endsWith('лич')) {
     switch (targetCase) {
@@ -341,11 +386,16 @@ export function declineFio(fullName: string, targetCase: GrammarCase = 'dative')
   }
 
   if (parts.length === 2) {
-    // "Иванов И.И." or "Иван Иванов"
-    const isInitialsSecond = /^[а-яа-зa-z]\.\s*([а-яа-зa-z]\.)?$/i.test(parts[1]);
-    if (isInitialsSecond) {
+    // Check if one part is initials (e.g. "Романов А.А.", "Романов А. А.", "А.А. Романов")
+    const isInitials1 = /^([а-яёa-z]\.\s*){1,2}[а-яёa-z]?\.?$/i.test(parts[0]);
+    const isInitials2 = /^([а-яёa-z]\.\s*){1,2}[а-яёa-z]?\.?$/i.test(parts[1]);
+
+    if (isInitials2) {
       const surname = declineSurname(parts[0], targetCase, gender);
       return `${surname} ${parts[1]}`;
+    } else if (isInitials1) {
+      const surname = declineSurname(parts[1], targetCase, gender);
+      return `${parts[0]} ${surname}`;
     } else {
       // Assuming Surname + First name
       const surname = declineSurname(parts[0], targetCase, gender);
@@ -368,43 +418,89 @@ export function declineFio(fullName: string, targetCase: GrammarCase = 'dative')
 }
 
 /**
+ * Clean trailing artifacts like ")у" or ")а" if present
+ */
+function cleanupPositionArtifacts(text: string): string {
+  return text.replace(/\)([уаеомiыяеи]|\b)/gi, ')').replace(/\)у$/i, ')');
+}
+
+/**
  * Automatic Job Title (Должность) declension for Russian official documents
- * Example: "Генеральный директор" -> "Генеральному директору" (Dative)
+ * Example: "Начальник бюро (бюро автоматики)" -> "Начальнику бюро (бюро автоматики)" (Dative)
  */
 export function declineJobPosition(position: string, targetCase: GrammarCase = 'dative'): string {
   if (!position || !position.trim()) return '';
-  const clean = position.trim();
+  let clean = cleanupPositionArtifacts(position.trim());
 
   if (targetCase === 'nominative') return clean;
 
-  const words = clean.split(/\s+/);
+  // Separate parenthetical suffix if present, e.g. "Начальник бюро (Бюро автоматики)"
+  // Parentheses in Russian official titles specify department or details and must remain untouched.
+  const parenMatch = clean.match(/^(.*?)\s*(\(.*?\))\s*$/);
+  let mainTitle = clean;
+  let parenSuffix = '';
+
+  if (parenMatch) {
+    mainTitle = parenMatch[1].trim();
+    parenSuffix = ' ' + parenMatch[2].trim();
+  }
+
+  const words = mainTitle.split(/\s+/);
+  let passedPreposition = false;
 
   const declinedWords = words.map((word, index) => {
-    // Keep preposition or hyphenated particles untouched
-    if (['в', 'на', 'по', 'за', 'и', 'для', 'с', 'из'].includes(word.toLowerCase())) {
+    // Extract punctuation around word (e.g. "(инженер," -> prefix="(", clean="инженер", suffix=",")
+    const pMatch = word.match(/^([^\wа-яёА-ЯЁ]*)([\wа-яёА-ЯЁ\-]+)([^\wа-яёА-ЯЁ]*)$/u);
+    if (!pMatch) return word;
+
+    const prefix = pMatch[1];
+    const rawWord = pMatch[2];
+    const suffix = pMatch[3];
+
+    const lower = rawWord.toLowerCase();
+
+    // Check prepositions (в, на, по, за, и, для, с, из, от)
+    if (['в', 'на', 'по', 'за', 'и', 'для', 'с', 'из', 'от'].includes(lower)) {
+      passedPreposition = true;
       return word;
     }
 
-    const lower = word.toLowerCase();
-
-    // Check hyphenated words e.g. Инженер-программист -> Инженеру-программисту
-    if (word.includes('-')) {
-      const parts = word.split('-');
-      return parts.map(p => declineJobPositionWord(p, targetCase, index === 0)).join('-');
+    // Once we pass a preposition or if word is inside punctuation, words stay in their grammar case
+    if (passedPreposition) {
+      return word;
     }
 
-    return declineJobPositionWord(word, targetCase, index === 0);
+    // Check hyphenated words e.g. Инженер-программист -> Инженеру-программисту
+    if (rawWord.includes('-')) {
+      const parts = rawWord.split('-');
+      const declinedParts = parts.map(p => declineJobPositionWord(p, targetCase, index === 0));
+      return prefix + declinedParts.join('-') + suffix;
+    }
+
+    const declinedStem = declineJobPositionWord(rawWord, targetCase, index === 0);
+    return prefix + declinedStem + suffix;
   });
 
-  return declinedWords.join(' ');
+  const result = declinedWords.join(' ') + parenSuffix;
+  return cleanupPositionArtifacts(result);
 }
 
 function declineJobPositionWord(word: string, targetCase: GrammarCase, isFirstWord: boolean): string {
   const lower = word.toLowerCase();
 
-  // Words that don't decline in title context e.g. "качества", "автоматики", "продаж", "кадров"
-  if (['качества', 'автоматики', 'продаж', 'кадров', 'МТС', 'АХО', 'ПО', 'ИТ', 'ВЭД'].includes(word)) {
+  // Abbreviations and non-declinable nouns
+  if (['качества', 'автоматики', 'продаж', 'кадров', 'МТС', 'АХО', 'ПО', 'ИТ', 'ВЭД', 'ОКК', 'ОТК', 'АО', 'НПО', 'ООО', 'ЗАО', 'бюро', 'депо', 'руководство', 'производства', 'разработки', 'проекта', 'цеха', 'предприятия', 'завода', 'службы', 'управления', 'департамента', 'отдела'].includes(word) || word === word.toUpperCase()) {
     return word;
+  }
+
+  // Already in Dative check
+  if (targetCase === 'dative') {
+    if (lower.endsWith('ому') || lower.endsWith('ему') || lower.endsWith('ной') || lower.endsWith('ской') || lower.endsWith('цкой')) {
+      return word;
+    }
+    if (lower.endsWith('нику') || lower.endsWith('тору') || lower.endsWith('еру') || lower.endsWith('сту') || lower.endsWith('телю') || lower.endsWith('ру') || lower.endsWith('цу') || lower.endsWith('гу') || lower.endsWith('ду') || lower.endsWith('лю')) {
+      return word;
+    }
   }
 
   // Adjectives e.g. "Генеральный" -> "Генеральному", "Главный" -> "Главному"
@@ -423,14 +519,20 @@ function declineJobPositionWord(word: string, targetCase: GrammarCase, isFirstWo
     if (targetCase === 'dative') return stem + 'ому';
     if (targetCase === 'genitive') return stem + 'ого';
   }
-
-  // Nouns e.g. "Директор" -> "Директору", "Начальник" -> "Начальнику", "Инженер" -> "Инженеру", "Бухгалтер" -> "Бухгалтеру"
-  if (lower.endsWith('тор') || lower.endsWith('ник') || lower.endsWith('ер') || lower.endsWith('ент') || lower.endsWith('ант') || lower.endsWith('тель')) {
-    if (targetCase === 'dative') return word + 'у';
-    if (targetCase === 'genitive') return word + 'а';
+  if (lower.endsWith('щий') || lower.endsWith('ший')) {
+    const stem = word.slice(0, -2);
+    if (targetCase === 'dative') return stem + 'ему';
+    if (targetCase === 'genitive') return stem + 'его';
   }
 
-  // Standard masculine noun ending in hard consonant
+  // Nouns ending in soft sign -ль e.g. "Руководитель" -> "Руководителю"
+  if (lower.endsWith('тель') || lower.endsWith('ль')) {
+    const stem = word.slice(0, -1);
+    if (targetCase === 'dative') return stem + 'ю';
+    if (targetCase === 'genitive') return stem + 'я';
+  }
+
+  // Standard masculine noun ending in hard consonant e.g. "Директор" -> "Директору", "Начальник" -> "Начальнику", "Инженер" -> "Инженеру"
   if (!/[аеёиоуыэюя]$/i.test(lower)) {
     if (targetCase === 'dative') return word + 'у';
     if (targetCase === 'genitive') return word + 'а';
