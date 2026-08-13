@@ -234,16 +234,64 @@ export default function App() {
     }
   };
 
-  const handleSaveCurrentAsDraft = (title: string) => {
+  const handleSaveCurrentAsDraft = (
+    title: string, 
+    bumpType: 'none' | 'minor' | 'major' = 'minor', 
+    comment: string = ''
+  ) => {
+    const nowStr = new Date().toLocaleString('ru-RU', { 
+      day: '2-digit', 
+      month: '2-digit', 
+      year: 'numeric', 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+
+    const currentVersion = docData.version || '1.0';
+    let newVersion = currentVersion;
+    if (bumpType === 'minor') {
+      const parts = currentVersion.split('.').map(p => parseInt(p, 10) || 0);
+      newVersion = `${parts[0] || 1}.${(parts[1] || 0) + 1}`;
+    } else if (bumpType === 'major') {
+      const parts = currentVersion.split('.').map(p => parseInt(p, 10) || 0);
+      newVersion = `${(parts[0] || 1) + 1}.0`;
+    }
+
+    const currentSnapshot: DocumentData = JSON.parse(JSON.stringify(docData));
+    currentSnapshot.version = newVersion;
+
+    const newVersionRecord = {
+      id: `ver-${Date.now()}`,
+      version: newVersion,
+      createdAt: nowStr,
+      author: docData.signature.senderName || 'Пользователь',
+      comment: comment || (bumpType === 'major' ? 'Новая редакция документа' : bumpType === 'minor' ? 'Корректировка документа' : 'Сохранение копии'),
+      dataSnapshot: currentSnapshot
+    };
+
+    const existingHistory = docData.versionHistory || [];
+    const updatedHistory = [newVersionRecord, ...existingHistory];
+
+    const updatedDocData: DocumentData = {
+      ...docData,
+      version: newVersion,
+      versionHistory: updatedHistory
+    };
+
+    setDocData(updatedDocData);
+
     const newDraft: SavedDraft = {
       id: `draft-${Date.now()}`,
       title: title,
-      savedAt: new Date().toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
-      data: JSON.parse(JSON.stringify(docData))
+      savedAt: nowStr,
+      version: newVersion,
+      versionHistory: updatedHistory,
+      data: updatedDocData
     };
-    const updated = [newDraft, ...draftsList];
-    setDraftsList(updated);
-    localStorage.setItem(DRAFTS_KEY, JSON.stringify(updated));
+
+    const updatedDrafts = [newDraft, ...draftsList];
+    setDraftsList(updatedDrafts);
+    localStorage.setItem(DRAFTS_KEY, JSON.stringify(updatedDrafts));
 
     setSavedNotification(true);
     setTimeout(() => setSavedNotification(false), 2500);

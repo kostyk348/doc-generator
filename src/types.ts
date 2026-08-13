@@ -87,6 +87,18 @@ export interface DocumentData {
     left: number;
     right: number;
   };
+
+  // Version Control (major.minor e.g. "1.0", "1.1", "2.0")
+  version?: string; // Default '1.0'
+  versionHistory?: DocumentVersion[];
+}
+
+export interface DocumentVersion {
+  version: string; // e.g. '1.0', '1.1', '2.0'
+  timestamp: string; // ISO or formatted date
+  comment?: string; // e.g. "Добавлены реквизиты", "Исправлен текст"
+  updatedBy?: string;
+  dataSnapshot: DocumentData;
 }
 
 export interface RegisteredDocument {

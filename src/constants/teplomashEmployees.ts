@@ -14,7 +14,7 @@ export interface TeplomashEmployee {
 export function sanitizeEmployeeDepartments(employees: TeplomashEmployee[]): TeplomashEmployee[] {
   return employees.map(emp => ({
     ...emp,
-    department: emp.department ? emp.department.trim() : 'Общий отдел',
+    department: emp.department ? emp.department.trim() : '',
     organization: emp.organization ? emp.organization.trim() : 'АО «НПО «Тепломаш»'
   }));
 }
