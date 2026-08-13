@@ -1,35 +1,33 @@
 #!/bin/bash
-# Запускать на сервере (tmdata@10.10.0.177) — из старого чекаута
-# (/home/tmdata/develop/frontend/doc-generator) при самом первом запуске после
-# переезда на новый путь, из /opt/tmdata-frontend/docgen во всех остальных случаях.
-# WorkingDirectory в systemd/docgen.service совпадает с новым каталогом, отдельного
-# rsync в /opt/tmdata, в отличие от frontend-приложений, не требуется — systemd
-# запускает node прямо отсюда. Синхронизирует и сам systemd-юнит при изменении —
-# повторного "sudo cp systemd/docgen.service /etc/..." руками быть не должно.
+# Запускать на сервере (tmdata@10.10.0.177).
+#
+# Раздельно staging и runtime — тот же паттерн, что у filter-app/filter-app-graphs
+# (deploy_frontend.sh): git-чекаут, node_modules, npm install/build живут в
+# STAGING_DIR (обычный домашний путь, не /opt), а в RUNTIME_DIR (/opt/tmdata-frontend/docgen,
+# откуда systemd реально запускает node) попадает только собранный рантайм через
+# rsync --delete — без .git/src/dev-файлов. esbuild собирает server.ts с
+# --packages=external (см. package.json), поэтому в рантайме, помимо dist/,
+# нужен ещё и node_modules — просто рсинкнуть dist/ недостаточно, сервер не найдёт
+# express и т.п.
 
 set -e
 
 GIT_REMOTE="local"
-OLD_DIR="/home/tmdata/develop/frontend/doc-generator"
-NEW_DIR="/opt/tmdata-frontend/docgen"
+GIT_URL="ssh://wms@10.10.0.165/home/wms/git-repos/tmdata/doc-generator.git"
+STAGING_DIR="/home/tmdata/develop/frontend/doc-generator"
+RUNTIME_DIR="/opt/tmdata-frontend/docgen"
 
 echo "=== DOC-GENERATOR DEPLOY: $(date) ==="
 
-# Разовый перенос со старого пути — идемпотентно: срабатывает только пока
-# NEW_DIR не существует. Скрипт продолжает работать и после переезда каталога,
-# из которого сам запущен, — открытый файловый дескриптор переживает и rename
-# (один диск), и copy+unlink (разные диски); явный cd ниже нужен, чтобы
-# дальнейшие относительные команды (npm, sudo cp systemd/...) резолвились
-# уже из нового места.
-if [[ -d "$OLD_DIR" && ! -d "$NEW_DIR" ]]; then
-    echo "→ Разовый перенос: $OLD_DIR → $NEW_DIR..."
-    sudo mkdir -p "$(dirname "$NEW_DIR")"
-    sudo systemctl stop docgen 2>/dev/null || true
-    sudo mv "$OLD_DIR" "$NEW_DIR"
-    sudo chown -R tmdata:tmdata "$NEW_DIR"
-    echo "  ✓ Перенесено"
+if [[ ! -d "$STAGING_DIR/.git" ]]; then
+    echo "→ Первичный чекаут в $STAGING_DIR..."
+    mkdir -p "$(dirname "$STAGING_DIR")"
+    git clone -o "$GIT_REMOTE" "$GIT_URL" "$STAGING_DIR"
+    cd "$STAGING_DIR"
+    git checkout prod
+else
+    cd "$STAGING_DIR"
 fi
-cd "$NEW_DIR"
 
 echo "→ Обновление кода..."
 git pull "$GIT_REMOTE" prod
@@ -44,6 +42,20 @@ echo "→ Установка зависимостей и сборка..."
 npm install
 npm run build
 echo "  ✓ Сборка завершена"
+
+echo "→ Синхронизация рантайма в $RUNTIME_DIR..."
+mkdir -p "$RUNTIME_DIR"
+# --delete с несколькими source-аргументами чистит только ВНУТРИ dist/node_modules,
+# а не посторонние top-level файлы назначения (.git, src, *.md...) — им просто неоткуда
+# взяться среди источников, поэтому --delete их не видит. Include/exclude-фильтр на
+# едином source ($STAGING_DIR/) — единственный способ реально удалить всё лишнее.
+rsync -a --delete \
+    --include='/dist/' --include='/dist/**' \
+    --include='/node_modules/' --include='/node_modules/**' \
+    --include='/package.json' \
+    --exclude='*' \
+    "$STAGING_DIR/" "$RUNTIME_DIR/"
+echo "  ✓ Рантайм синхронизирован (dist/, node_modules/, package.json — без .git/src/dev-файлов)"
 
 # Синхронизация systemd-юнита с репозиторием — без этого правки в
 # systemd/docgen.service остаются только в git, живой /etc/systemd/system/docgen.service
