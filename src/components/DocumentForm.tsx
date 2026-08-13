@@ -3,6 +3,7 @@ import { DocumentData } from '../types';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
 import { getInitialBlankDocument } from '../constants/presets';
 import { validateDocument, ValidationError, getFieldErrors, isValidEmail } from '../utils/validationUtils';
+import { declineFio, declineJobPosition, pluralizeNoun } from '../utils/declensionUtils';
 import { 
   DEPARTMENT_CODES, 
   generateDocumentNumber, 
@@ -57,7 +58,8 @@ import {
   Send,
   AlertTriangle,
   ShieldAlert,
-  Mail
+  Mail,
+  Wand2
 } from 'lucide-react';
 
 interface DocumentFormProps {
@@ -552,6 +554,17 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>Должность сотрудника (в дательном падеже)</span>
+                  {data.recipient.position.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => handleRecipientChange('position', declineJobPosition(data.recipient.position, 'dative'))}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded transition-colors"
+                      title="Автоматически просклонять должность в дательный падеж (кому?)"
+                    >
+                      <Wand2 className="w-3 h-3 text-indigo-600" />
+                      <span>Склонить (Дательный)</span>
+                    </button>
+                  )}
                 </label>
                 <input
                   type="text"
@@ -588,6 +601,17 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>ФИО сотрудника (в дательном падеже)</span>
+                  {data.recipient.name.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => handleRecipientChange('name', declineFio(data.recipient.name, 'dative'))}
+                      className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded transition-colors"
+                      title="Автоматически просклонять ФИО в дательный падеж (кому?)"
+                    >
+                      <Wand2 className="w-3 h-3 text-indigo-600" />
+                      <span>Склонить ФИО</span>
+                    </button>
+                  )}
                 </label>
                 <input
                   type="text"
@@ -659,8 +683,19 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    Должность адресата
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>Должность адресата</span>
+                    {data.recipient.position.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleRecipientChange('position', declineJobPosition(data.recipient.position, 'dative'))}
+                        className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded transition-colors"
+                        title="Склонить должность в дательный падеж"
+                      >
+                        <Wand2 className="w-3 h-3 text-indigo-600" />
+                        <span>Склонить</span>
+                      </button>
+                    )}
                   </label>
                   <input
                     type="text"
@@ -682,8 +717,19 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                    ФИО адресата (в дательном падеже)
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                    <span>ФИО адресата (в дательном)</span>
+                    {data.recipient.name.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => handleRecipientChange('name', declineFio(data.recipient.name, 'dative'))}
+                        className="text-[10px] text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 bg-indigo-50 hover:bg-indigo-100 px-1.5 py-0.5 rounded transition-colors"
+                        title="Склонить ФИО в дательный падеж"
+                      >
+                        <Wand2 className="w-3 h-3 text-indigo-600" />
+                        <span>Склонить</span>
+                      </button>
+                    )}
                   </label>
                   <input
                     type="text"
@@ -1443,6 +1489,35 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
               <span>{fieldErrors.content}</span>
             </p>
           )}
+
+          {/* LIVE TEXT COUNTER & STATS CARD */}
+          <div className="bg-slate-50 border border-slate-200/90 rounded-lg p-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-slate-700 font-sans shadow-2xs mt-2">
+            <div className="p-1.5 bg-white rounded border border-slate-200/80">
+              <span className="block text-[10px] uppercase font-bold text-slate-400">Символов</span>
+              <span className="text-xs font-mono font-extrabold text-slate-900">
+                {rawText.length} <span className="text-[10px] text-slate-400 font-normal">({rawText.replace(/\s/g, '').length} без проб.)</span>
+              </span>
+            </div>
+            <div className="p-1.5 bg-white rounded border border-slate-200/80">
+              <span className="block text-[10px] uppercase font-bold text-slate-400">Слов</span>
+              <span className="text-xs font-mono font-extrabold text-slate-900">
+                {pluralizeNoun(rawText.trim() === '' ? 0 : rawText.trim().split(/\s+/).filter(Boolean).length, ['слово', 'слова', 'слов'])}
+              </span>
+            </div>
+            <div className="p-1.5 bg-white rounded border border-slate-200/80">
+              <span className="block text-[10px] uppercase font-bold text-slate-400">Абзацев</span>
+              <span className="text-xs font-mono font-extrabold text-slate-900">
+                {pluralizeNoun(rawText.trim() === '' ? 0 : rawText.split(/\n+/).filter(p => p.trim().length > 0).length, ['абзац', 'абзаца', 'абзацев'])}
+              </span>
+            </div>
+            <div className="p-1.5 bg-white rounded border border-slate-200/80">
+              <span className="block text-[10px] uppercase font-bold text-slate-400">Страниц А4</span>
+              <span className="text-xs font-mono font-extrabold text-indigo-700">
+                ~ {pluralizeNoun(Math.max(1, Math.ceil(rawText.length / 2200)), ['страница', 'страницы', 'страниц'])}
+              </span>
+            </div>
+          </div>
+
           <p className="text-[11px] text-slate-400">
             Подсказка: разделяйте абзацы пустой строкой (двойной Enter). В предпросмотре ГОСТ абзацы автоматически оформляются красной строкой (отступом).
           </p>

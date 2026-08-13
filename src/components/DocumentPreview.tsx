@@ -186,29 +186,35 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
             </div>
 
             {/* Signature Graphic / Digital Signature Stamp / Line */}
-            <div className="w-[38%] flex items-center justify-center relative z-10 min-h-[50px] border-none bg-transparent shadow-none">
+            <div className="w-[42%] flex items-center justify-center relative z-10 min-h-[60px] border-none bg-transparent shadow-none">
               {signature.useDigitalSignature ? (
-                <div className="w-full border-2 border-indigo-900 rounded bg-indigo-50/60 p-2 font-sans text-indigo-950 shadow-2xs text-[8pt] leading-tight select-none">
-                  <div className="border-b border-indigo-800 pb-1 mb-1 font-bold flex items-center justify-between text-[8pt] tracking-tight">
-                    <span className="flex items-center gap-1 uppercase">
-                      <svg className="w-3.5 h-3.5 text-indigo-900 shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
-                      </svg>
-                      ДОКУМЕНТ ПОДПИСАН ЭП
-                    </span>
+                <div className="w-full border-2 border-[#1e3a8a] rounded-xs bg-[#f8fafc] p-2 font-sans text-slate-900 shadow-none text-[7.5pt] leading-tight select-none">
+                  <div className="border-b-2 border-[#1e3a8a] pb-1 mb-1 font-bold flex items-center justify-center gap-1 text-[8pt] text-[#1e3a8a] tracking-tight">
+                    <svg className="w-3.5 h-3.5 text-[#1e3a8a] shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z"/>
+                    </svg>
+                    <span className="uppercase font-extrabold tracking-tight">ДОКУМЕНТ ПОДПИСАН ЭЛЕКТРОННОЙ ПОДПИСЬЮ</span>
                   </div>
-                  <div className="space-y-0.5">
-                    <div className="font-mono font-semibold text-indigo-900">
-                      <span className="font-sans font-normal text-indigo-700">Ключ:</span> {signature.digitalSignatureKey || '4F8A-9C12-8B0E-3D77'}
+                  <div className="space-y-0.5 font-sans text-[#0f172a] text-[7pt]">
+                    <div className="flex items-start justify-start gap-1">
+                      <span className="font-bold text-[#1e3a8a] shrink-0">Сертификат:</span>
+                      <span className="font-mono font-semibold break-all">{signature.digitalSignatureKey || '4F8A-9C12-8B0E-3D77'}</span>
                     </div>
-                    <div>
-                      <span className="text-indigo-700">Владелец:</span> <strong className="font-bold">{signature.senderName || 'Сотрудник'}</strong>
+                    <div className="flex items-start justify-start gap-1">
+                      <span className="font-bold text-[#1e3a8a] shrink-0">Владелец:</span>
+                      <strong className="font-bold text-slate-950 uppercase">{signature.senderName || 'Сотрудник Тепломаш'}</strong>
                     </div>
-                    <div>
-                      <span className="text-indigo-700">Дата:</span> {signature.digitalSignatureDate || cleanDate}
-                    </div>
-                    <div className="text-[7pt] text-indigo-800 font-medium pt-0.5 border-t border-indigo-200/60 mt-0.5">
-                      Зарегистрировано в реестре писем Тепломаш
+                    <div className="flex items-start justify-start gap-1">
+                      <span className="font-bold text-[#1e3a8a] shrink-0">Действителен:</span>
+                      <span>с {cleanDate} по {(() => {
+                        try {
+                          const parts = cleanDate.split('.');
+                          if (parts.length === 3) {
+                            return `${parts[0]}.${parts[1]}.${parseInt(parts[2], 10) + 1}`;
+                          }
+                        } catch {}
+                        return '13.08.2027';
+                      })()}</span>
                     </div>
                   </div>
                 </div>
