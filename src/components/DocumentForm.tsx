@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { DocumentData } from '../types';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
 import { getInitialBlankDocument } from '../constants/presets';
-import { validateDocument, ValidationError } from '../utils/validationUtils';
+import { validateDocument, ValidationError, getFieldErrors, isValidEmail } from '../utils/validationUtils';
 import { 
   DEPARTMENT_CODES, 
   generateDocumentNumber, 
@@ -56,7 +56,8 @@ import {
   Copy,
   Send,
   AlertTriangle,
-  ShieldAlert
+  ShieldAlert,
+  Mail
 } from 'lucide-react';
 
 interface DocumentFormProps {
@@ -177,6 +178,7 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
 
   // Calculate current document validation errors
   const validationErrors = validateDocument(data);
+  const fieldErrors = getFieldErrors(data);
 
   // 1. Triggered on click: checks duplicates and opens confirmation dialog
   const handlePublishAndRegisterDocument = () => {
@@ -548,16 +550,26 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
           {isInternal ? (
             <>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Должность сотрудника (в дательном падеже)
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Должность сотрудника (в дательном падеже)</span>
                 </label>
                 <input
                   type="text"
                   value={data.recipient.position}
                   onChange={(e) => handleRecipientChange('position', e.target.value)}
                   placeholder="Например: Начальнику бюро автоматики"
-                  className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans"
+                  className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
+                    fieldErrors.recipientPos
+                      ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                  }`}
                 />
+                {fieldErrors.recipientPos && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{fieldErrors.recipientPos}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -574,31 +586,75 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  ФИО сотрудника (в дательном падеже)
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>ФИО сотрудника (в дательном падеже)</span>
                 </label>
                 <input
                   type="text"
                   value={data.recipient.name}
                   onChange={(e) => handleRecipientChange('name', e.target.value)}
                   placeholder="Например: Романову А. А."
-                  className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans"
+                  className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
+                    fieldErrors.recipientName
+                      ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                  }`}
                 />
+                {fieldErrors.recipientName && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{fieldErrors.recipientName}</span>
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span>E-mail сотрудника (опционально)</span>
+                </label>
+                <input
+                  type="email"
+                  value={data.recipient.email || ''}
+                  onChange={(e) => handleRecipientChange('email', e.target.value)}
+                  placeholder="Например: romanov@teplomash.ru"
+                  className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
+                    fieldErrors.recipientEmail
+                      ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20 font-medium'
+                      : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                  }`}
+                />
+                {fieldErrors.recipientEmail && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{fieldErrors.recipientEmail}</span>
+                  </p>
+                )}
               </div>
             </>
           ) : (
             <>
               <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                  Название сторонней компании / Организации
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                  <span>Название сторонней компании / Организации *</span>
                 </label>
                 <input
                   type="text"
                   value={data.recipient.organization}
                   onChange={(e) => handleRecipientChange('organization', e.target.value)}
                   placeholder="Например: ООО «ТехноПром» или ПАО «Газпром»"
-                  className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans font-bold text-indigo-950"
+                  className={`w-full text-xs p-2.5 rounded border transition-all font-sans font-bold outline-none ${
+                    fieldErrors.recipientOrg
+                      ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                      : 'border-slate-300 text-indigo-950 focus:ring-1 focus:ring-indigo-500'
+                  }`}
                 />
+                {fieldErrors.recipientOrg && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{fieldErrors.recipientOrg}</span>
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -611,8 +667,18 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                     value={data.recipient.position}
                     onChange={(e) => handleRecipientChange('position', e.target.value)}
                     placeholder="Например: Генеральному директору"
-                    className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans"
+                    className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
+                      fieldErrors.recipientPos
+                        ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                        : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                    }`}
                   />
+                  {fieldErrors.recipientPos && (
+                    <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                      <span>{fieldErrors.recipientPos}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -624,9 +690,43 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                     value={data.recipient.name}
                     onChange={(e) => handleRecipientChange('name', e.target.value)}
                     placeholder="Например: Петрову П. В."
-                    className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans"
+                    className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
+                      fieldErrors.recipientName
+                        ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                        : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                    }`}
                   />
+                  {fieldErrors.recipientName && (
+                    <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                      <span>{fieldErrors.recipientName}</span>
+                    </p>
+                  )}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Mail className="w-3.5 h-3.5 text-slate-400" />
+                  <span>E-mail организации / адресата (для отправки)</span>
+                </label>
+                <input
+                  type="email"
+                  value={data.recipient.email || ''}
+                  onChange={(e) => handleRecipientChange('email', e.target.value)}
+                  placeholder="Например: info@technoprom.ru"
+                  className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
+                    fieldErrors.recipientEmail
+                      ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20 font-medium'
+                      : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                  }`}
+                />
+                {fieldErrors.recipientEmail && (
+                  <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                    <span>{fieldErrors.recipientEmail}</span>
+                  </p>
+                )}
               </div>
 
               <div>
@@ -700,9 +800,19 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 value={data.docType}
                 onChange={(e) => onChange({ ...data, docType: e.target.value.toUpperCase() })}
                 placeholder="Или введите свой заголовок (например: УВЕДОМЛЕНИЕ)"
-                className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-semibold uppercase tracking-wide"
+                className={`w-full text-xs p-2.5 rounded border transition-all font-semibold uppercase tracking-wide outline-none ${
+                  fieldErrors.docType
+                    ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                    : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                }`}
               />
             </div>
+            {fieldErrors.docType && (
+              <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                <span>{fieldErrors.docType}</span>
+              </p>
+            )}
           </div>
 
           <div>
@@ -774,15 +884,25 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
           {data.showInRefNumber && (
             <div className="space-y-1.5 animate-in fade-in duration-150 pl-1">
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider">
-                Ссылка на входящий №
+                Ссылка на входящий № *
               </label>
               <input
                 type="text"
                 value={data.inRefNumber || ''}
                 onChange={(e) => onChange({ ...data, inRefNumber: e.target.value })}
                 placeholder="Например: На № 11/07 от 28.07.2026г."
-                className="w-full text-xs p-2.5 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all font-sans bg-white"
+                className={`w-full text-xs p-2.5 rounded border transition-all font-sans bg-white outline-none ${
+                  fieldErrors.inRefNumber
+                    ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                    : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+                }`}
               />
+              {fieldErrors.inRefNumber && (
+                <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+                  <span>{fieldErrors.inRefNumber}</span>
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -1311,8 +1431,18 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
             onChange={(e) => !data.isPublished && handleTextareaChange(e.target.value)}
             readOnly={data.isPublished && !isAdmin}
             placeholder="Введите основной текст документа. Обычный перенос строки (Enter) сохраняет абзац, а пустая строка между абзацами разделяет блоки."
-            className="w-full text-xs p-3 rounded border border-slate-300 focus:ring-1 focus:ring-indigo-500 outline-none transition-all leading-relaxed font-sans disabled:bg-slate-50"
+            className={`w-full text-xs p-3 rounded border transition-all leading-relaxed font-sans disabled:bg-slate-50 outline-none ${
+              fieldErrors.content
+                ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
+            }`}
           />
+          {fieldErrors.content && (
+            <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
+              <span>{fieldErrors.content}</span>
+            </p>
+          )}
           <p className="text-[11px] text-slate-400">
             Подсказка: разделяйте абзацы пустой строкой (двойной Enter). В предпросмотре ГОСТ абзацы автоматически оформляются красной строкой (отступом).
           </p>

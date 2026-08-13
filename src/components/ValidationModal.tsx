@@ -7,7 +7,7 @@ interface ValidationModalProps {
   onClose: () => void;
   errors: ValidationError[];
   actionName?: string;
-  onFixField?: (field: 'content' | 'sender' | 'recipient') => void;
+  onFixField?: (field: ValidationError['field']) => void;
 }
 
 export const ValidationModal: React.FC<ValidationModalProps> = ({
