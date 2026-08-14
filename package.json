@@ -39,11 +39,8 @@
     "@vitejs/plugin-react": "^5.0.4",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "html2canvas": "^1.4.1",
     "jsbarcode": "^3.12.3",
-    "jspdf": "^4.2.1",
     "lucide-react": "^0.546.0",
-    "pdf-lib": "^1.17.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "vite": "^6.2.3"
