@@ -3,7 +3,6 @@ import { DocumentData, DocumentVersion } from './types';
 import { INITIAL_DOCUMENT, TEPLOMASH_OFFICIAL_HEADER_URL } from './constants/presets';
 import { DocumentForm } from './components/DocumentForm';
 import { SignatureSettings } from './components/SignatureSettings';
-import { StyleControls } from './components/StyleControls';
 import { DocumentPreview } from './components/DocumentPreview';
 import { DraftsModal, SavedDraft } from './components/DraftsModal';
 import { TeplomashEmployeeSelectorModal } from './components/TeplomashEmployeeSelectorModal';
@@ -35,7 +34,6 @@ import {
   Printer, 
   UserCheck, 
   PenTool, 
-  Palette, 
   FolderOpen, 
   Plus, 
   Save, 
@@ -148,7 +146,7 @@ export default function App() {
     return INITIAL_DOCUMENT;
   });
 
-  const [activeTab, setActiveTab] = useState<'fields' | 'signature' | 'style'>('fields');
+  const [activeTab, setActiveTab] = useState<'fields' | 'signature'>('fields');
   const isAdmin = userRole === 'admin';
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
   const [isDraftsOpen, setIsDraftsOpen] = useState<boolean>(false);
@@ -606,21 +604,6 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
               <PenTool className="w-3.5 h-3.5" />
               <span>Подпись</span>
             </button>
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('style')}
-                className={`flex-1 py-2 px-2.5 rounded text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
-                  activeTab === 'style'
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                }`}
-              >
-                <Palette className="w-3.5 h-3.5" />
-                <span>Оформление</span>
-              </button>
-            )}
           </div>
 
           {/* Active Tab Panel Container */}
@@ -645,14 +628,6 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
                 isAdmin={isAdmin}
                 docData={docData}
                 onDocDataChange={setDocData}
-              />
-            )}
-
-            {activeTab === 'style' && (
-              <StyleControls
-                data={docData}
-                onChange={setDocData}
-                isAdmin={isAdmin}
               />
             )}
           </div>
