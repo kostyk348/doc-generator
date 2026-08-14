@@ -18,7 +18,9 @@ import {
   Sparkles,
   Download,
   Printer,
-  Filter
+  Filter,
+  BarChart3,
+  List
 } from 'lucide-react';
 import { 
   RegisteredDocument, 
@@ -30,6 +32,7 @@ import {
   rechainRegistry,
   fnv1a64Hex
 } from '../constants/departmentCodes';
+import { computeRegistryStats } from '../utils/registryStats';
 
 interface RegistryModalProps {
   isOpen: boolean;
@@ -51,6 +54,7 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [chainStatus, setChainStatus] = useState<{ valid: boolean; total: number; checked: boolean }>({ valid: true, total: 0, checked: false });
   const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'stats'>('list');
 
   const isAdmin = userRole === 'admin';
 
@@ -87,6 +91,8 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
       );
     });
   }, [registryList, search, deptFilter]);
+
+  const stats = useMemo(() => computeRegistryStats(registryList), [registryList]);
 
   if (!isOpen) return null;
 
@@ -243,6 +249,33 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-white border border-slate-300 rounded-lg p-0.5">
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors flex items-center gap-1 ${
+                  viewMode === 'list' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Список записей"
+              >
+                <List className="w-3.5 h-3.5" />
+                Список
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('stats')}
+                className={`px-2.5 py-1.5 rounded-md text-[11px] font-bold transition-colors flex items-center gap-1 ${
+                  viewMode === 'stats' ? 'bg-indigo-600 text-white shadow-2xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Статистика реестра"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                Статистика
+              </button>
+            </div>
+
+            {viewMode === 'list' && (
+            <>
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
@@ -297,6 +330,8 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
                 <Shield className="w-3.5 h-3.5 text-slate-500" />
                 <span>Режим управления (Админ)</span>
               </button>
+            )}
+            </>
             )}
           </div>
         </div>
@@ -357,7 +392,133 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
 
         {/* Documents Registry List Body */}
         <div className="p-4 overflow-y-auto flex-1 space-y-3">
-          {registryList.length > 0 && (
+          {viewMode === 'stats' ? (
+            /* ================= STATS DASHBOARD ================= */
+            <div className="space-y-4">
+              {/* KPI cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="bg-indigo-950 text-white rounded-xl p-4 shadow-xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Всего документов</div>
+                  <div className="text-3xl font-bold mt-1">{stats.total}</div>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">В среднем в месяц</div>
+                  <div className="text-3xl font-bold mt-1 text-slate-900">{stats.avgPerMonth}</div>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Отделов</div>
+                  <div className="text-3xl font-bold mt-1 text-slate-900">{stats.byDept.length}</div>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Последняя регистрация</div>
+                  <div className="text-sm font-bold mt-2 text-slate-900 leading-tight">{stats.lastRegisteredAt || '—'}</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* По месяцам */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-500" /> Динамика по месяцам (6 мес.)
+                  </h4>
+                  {stats.byMonth.every(m => m.count === 0) ? (
+                    <p className="text-xs text-slate-400">Нет данных за последние 6 месяцев</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {stats.byMonth.slice().reverse().map(m => {
+                        const max = Math.max(1, ...stats.byMonth.map(x => x.count));
+                        return (
+                          <div key={m.key} className="flex items-center gap-2">
+                            <span className="text-[10px] font-semibold text-slate-500 w-16 shrink-0">{m.label}</span>
+                            <div className="flex-1 h-5 bg-slate-100 rounded overflow-hidden">
+                              <div
+                                className={`h-full rounded flex items-center justify-end pr-1.5 text-[10px] font-bold ${
+                                  m.count > 0 ? 'bg-indigo-500 text-white' : 'bg-transparent'
+                                }`}
+                                style={{ width: `${Math.max(4, (m.count / max) * 100)}%` }}
+                              >
+                                {m.count > 0 ? m.count : ''}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* По типам */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-indigo-500" /> По типам документов
+                  </h4>
+                  {stats.byType.length === 0 ? (
+                    <p className="text-xs text-slate-400">Нет данных</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {stats.byType.map(t => (
+                        <div key={t.key} className="flex items-center justify-between py-1 px-2.5 bg-slate-50 rounded-lg">
+                          <span className="text-xs font-semibold text-slate-700">{t.label}</span>
+                          <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full">{t.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* По отделам */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-indigo-500" /> По отделам
+                  </h4>
+                  {stats.byDept.length === 0 ? (
+                    <p className="text-xs text-slate-400">Нет данных</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {stats.byDept.map(d => (
+                        <div key={d.name} className="flex items-center gap-2">
+                          <span className="text-[11px] text-slate-600 flex-1 truncate">{d.name}</span>
+                          <div className="w-28 h-3 bg-slate-100 rounded overflow-hidden">
+                            <div
+                              className="h-full bg-emerald-500 rounded"
+                              style={{ width: `${(d.count / stats.byDept[0].count) * 100}%` }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-bold text-slate-700 w-6 text-right">{d.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Топ составителей */}
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-2xs">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-indigo-500" /> Топ составителей
+                  </h4>
+                  {stats.byComposer.length === 0 ? (
+                    <p className="text-xs text-slate-400">Нет данных</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {stats.byComposer.map((c, i) => (
+                        <div key={c.name + i} className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 text-[10px] font-bold flex items-center justify-center shrink-0">
+                            {i + 1}
+                          </span>
+                          <span className="text-[11px] text-slate-600 flex-1 truncate">{c.name}</span>
+                          <span className="text-[11px] font-bold text-slate-700">{c.count}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="text-[10px] text-slate-400 font-medium">
+                Статистика построена по всем записям реестра ({stats.total}). Динамика по месяцам — по дате документа.
+              </div>
+            </div>
+          ) : registryList.length > 0 && (
             <div className="text-[10px] text-slate-400 font-medium pb-1">
               Показано: <strong className="text-slate-600">{filteredDocs.length}</strong> из {registryList.length}
               {deptFilter !== 'all' && <> (фильтр: {deptFilter})</>}
