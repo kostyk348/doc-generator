@@ -38,19 +38,19 @@ const SAVED_SIGNATURES_KEY = 'doc_gen_saved_signatures_v2';
 const SAMPLE_SAVED_SIGNATURES: SavedSignatureItem[] = [
   {
     id: 'sig-sample-1',
-    title: 'Факсимиле: Орлов Д.С. (Генеральный директор)',
+    title: 'Образец: подпись (директор)',
     imageUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="220" height="80" viewBox="0 0 220 80"><path d="M 20,50 Q 30,10 45,40 T 70,30 T 90,60 T 120,20 T 150,50 T 180,35" fill="none" stroke="%231e3a8a" stroke-width="3" stroke-linecap="round"/><path d="M 35,45 Q 60,65 100,55 T 160,40" fill="none" stroke="%231e3a8a" stroke-width="2" stroke-linecap="round"/><path d="M 110,25 Q 130,15 140,30" fill="none" stroke="%231e3a8a" stroke-width="2.5" stroke-linecap="round"/></svg>',
     createdAt: '01.08.2026',
-    senderName: 'Орлов Д.С.',
+    senderName: '',
     senderPosition: 'Генеральный директор',
     senderDepartment: 'Дирекция'
   },
   {
     id: 'sig-sample-2',
-    title: 'Факсимиле: Смирнов А.В. (Главный инженер)',
+    title: 'Образец: подпись (главный инженер)',
     imageUrl: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="220" height="80" viewBox="0 0 220 80"><path d="M 15,40 C 30,10 40,65 55,30 C 70,10 80,55 95,35 L 125,50 M 110,30 C 130,20 150,45 175,30" fill="none" stroke="%231d4ed8" stroke-width="2.8" stroke-linecap="round"/><path d="M 40,55 Q 90,20 160,50" fill="none" stroke="%231d4ed8" stroke-width="2" stroke-linecap="round"/></svg>',
     createdAt: '03.08.2026',
-    senderName: 'Смирнов А.В.',
+    senderName: '',
     senderPosition: 'Главный инженер',
     senderDepartment: 'Служба главного инженера'
   }
@@ -511,6 +511,24 @@ export const SignatureSettings: React.FC<SignatureSettingsProps> = ({
                   <span className="font-mono font-bold text-indigo-950 bg-indigo-100/80 px-1.5 py-0.5 rounded border border-indigo-300">
                     {signature.digitalSignatureKey || generateDigitalSignatureKey()}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newKey = generateDigitalSignatureKey();
+                      onChange({
+                        ...signature,
+                        useDigitalSignature: true,
+                        digitalSignatureKey: newKey,
+                        digitalSignatureDate: new Date().toLocaleString('ru-RU', {
+                          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })
+                      });
+                    }}
+                    className="ml-2 px-2 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200 transition-colors"
+                    title="Сгенерировать новый уникальный ключ подписи"
+                  >
+                    Пересоздать ключ
+                  </button>
                 </div>
                 <div>
                   <span className="text-slate-500 font-medium">Владелец ключа:</span>{' '}

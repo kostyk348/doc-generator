@@ -123,11 +123,3 @@ export interface RegisteredDocument {
   /** Hash-chain целостности реестра: FNV-1a 64 от канонической записи + prevHash. */
   hash?: string;
 }
-
-export interface DocumentPreset {
-  id: string;
-  title: string;
-  description: string;
-  category: string;
-  data: Partial<DocumentData>;
-}

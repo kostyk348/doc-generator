@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { DocumentData, DocumentPreset, DocumentVersion } from './types';
+import { DocumentData, DocumentVersion } from './types';
 import { INITIAL_DOCUMENT, TEPLOMASH_OFFICIAL_HEADER_URL } from './constants/presets';
 import { DocumentForm } from './components/DocumentForm';
 import { SignatureSettings } from './components/SignatureSettings';
 import { StyleControls } from './components/StyleControls';
 import { DocumentPreview } from './components/DocumentPreview';
-import { TemplatesModal } from './components/TemplatesModal';
 import { DraftsModal, SavedDraft } from './components/DraftsModal';
 import { TeplomashEmployeeSelectorModal } from './components/TeplomashEmployeeSelectorModal';
 import { AuthModal } from './components/AuthModal';
@@ -30,6 +29,7 @@ import {
   getNextDepartmentSeq, 
   generateDocumentNumber 
 } from './constants/departmentCodes';
+import type { RegisteredDocument } from './types';
 import { 
   FileText, 
   Printer, 
@@ -100,6 +100,27 @@ export default function App() {
     return sanitizeEmployeeDepartments(TEPLOMASH_EMPLOYEES);
   });
 
+  // Локальная база сотрудников (файл в .gitignore, персональные данные).
+  // Загружается один раз при первом запуске, если хранилище пусто.
+  useEffect(() => {
+    const saved = localStorage.getItem(EMPLOYEES_KEY);
+    if (saved !== null) return; // пользователь уже имеет базу
+    fetch('employees.local.json', { cache: 'no-store' })
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data: TeplomashEmployee[]) => {
+        if (Array.isArray(data) && data.length > 0) {
+          const filled = data.filter(e => e.fullName && e.shortName);
+          if (filled.length > 0) {
+            setEmployees(sanitizeEmployeeDepartments(filled));
+          }
+        }
+      })
+      .catch(() => { /* файл отсутствует — база останется пустой */ });
+  }, []);
+
   useEffect(() => {
     localStorage.setItem(EMPLOYEES_KEY, JSON.stringify(employees));
   }, [employees]);
@@ -130,7 +151,6 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'fields' | 'signature' | 'style'>('fields');
   const isAdmin = userRole === 'admin';
   const [zoomLevel, setZoomLevel] = useState<number>(1.0);
-  const [isTemplatesOpen, setIsTemplatesOpen] = useState<boolean>(false);
   const [isDraftsOpen, setIsDraftsOpen] = useState<boolean>(false);
   const [isEmployeeModalOpen, setIsEmployeeModalOpen] = useState<boolean>(false);
   const [isRegistryOpen, setIsRegistryOpen] = useState<boolean>(false);
@@ -311,23 +331,6 @@ export default function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isPrintModalOpen, setIsPrintModalOpen] = useState<boolean>(false);
 
-  const handleSelectPreset = (preset: DocumentPreset) => {
-    const todayStr = new Date().toLocaleDateString('ru-RU');
-    setDocData({
-      ...docData,
-      ...preset.data,
-      date: todayStr,
-      recipient: {
-        ...docData.recipient,
-        ...preset.data.recipient
-      },
-      signature: {
-        ...docData.signature,
-        ...preset.data.signature
-      }
-    });
-  };
-
   const [validationModalState, setValidationModalState] = useState<{
     isOpen: boolean;
     errors: ValidationError[];
@@ -344,6 +347,30 @@ export default function App() {
       docType: 'СЛУЖЕБНАЯ ЗАПИСКА',
       docSubject: ''
     });
+  };
+
+  // Восстановить документ из записи реестра как новый черновик
+  const handleOpenRegistryAsDraft = (doc: RegisteredDocument) => {
+    setDocData({
+      ...INITIAL_DOCUMENT,
+      id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      date: new Date().toLocaleDateString('ru-RU'),
+      refNumber: doc.regNumber,
+      docSubject: doc.subject,
+      isPublished: false,
+      recipient: {
+        ...INITIAL_DOCUMENT.recipient,
+        name: doc.recipientName,
+        organization: 'АО «НПО «Тепломаш»'
+      },
+      signature: {
+        ...INITIAL_DOCUMENT.signature,
+        senderName: doc.composerName,
+        senderDepartment: doc.composerDept
+      }
+    });
+    setIsRegistryOpen(false);
+    setIsDraftsOpen(false);
   };
 
   const handlePrint = () => {
@@ -706,13 +733,6 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
       </footer>
 
       {/* Modals */}
-      <TemplatesModal
-        isOpen={isTemplatesOpen}
-        onClose={() => setIsTemplatesOpen(false)}
-        onSelectPreset={handleSelectPreset}
-        onNewBlank={handleNewBlank}
-      />
-
       <DraftsModal
         isOpen={isDraftsOpen}
         onClose={() => setIsDraftsOpen(false)}
@@ -739,6 +759,7 @@ ${docData.signature.senderPosition} __________ ${docData.signature.senderName}
         onClose={() => setIsRegistryOpen(false)}
         userRole={userRole}
         onRequestAdminAuth={() => setIsAuthModalOpen(true)}
+        onOpenAsDraft={handleOpenRegistryAsDraft}
       />
 
       <AuthModal

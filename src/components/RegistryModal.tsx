@@ -20,7 +20,9 @@ import {
   Printer,
   Filter,
   BarChart3,
-  List
+  List,
+  Copy,
+  ShieldCheck
 } from 'lucide-react';
 import { 
   RegisteredDocument, 
@@ -39,13 +41,15 @@ interface RegistryModalProps {
   onClose: () => void;
   userRole?: 'admin' | 'user' | null;
   onRequestAdminAuth?: () => void;
+  onOpenAsDraft?: (doc: RegisteredDocument) => void;
 }
 
 export const RegistryModal: React.FC<RegistryModalProps> = ({
   isOpen,
   onClose,
   userRole,
-  onRequestAdminAuth
+  onRequestAdminAuth,
+  onOpenAsDraft
 }) => {
   const [registryList, setRegistryList] = useState<RegisteredDocument[]>([]);
   const [search, setSearch] = useState('');
@@ -649,8 +653,9 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
 
                       {/* Right side info & Actions */}
                       <div className="flex flex-col md:items-end gap-2 shrink-0 border-t md:border-t-0 pt-2 md:pt-0 border-slate-100">
-                        {isAdmin && doc.digitalSignatureKey && (
-                          <div className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-md font-mono text-[10px] font-bold text-indigo-950 shadow-2xs" title="Уникальный ключ электронной подписи (виден только администратору)">
+                        {doc.digitalSignatureKey && (
+                          <div className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-md font-mono text-[10px] font-bold text-indigo-950 shadow-2xs" title="Уникальный ключ электронной подписи документа">
+                            <ShieldCheck className="w-3 h-3 inline mr-1 text-indigo-700" />
                             Ключ ЭП: <span className="text-indigo-700">{doc.digitalSignatureKey}</span>
                           </div>
                         )}
@@ -660,31 +665,45 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
                           <span>Зарегистрировано: {doc.registeredAt}</span>
                         </div>
 
-                        {isAdmin && (
-                          <div className="flex items-center gap-1.5 pt-1">
+                        <div className="flex items-center gap-1.5 pt-1 flex-wrap justify-end">
+                          {onOpenAsDraft && (
                             <button
                               type="button"
-                              onClick={() => {
-                                setEditingDocId(doc.id);
-                                setEditingDocData({ ...doc });
-                              }}
-                              className="px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1"
-                              title="Редактировать запись"
+                              onClick={() => onOpenAsDraft(doc)}
+                              className="px-2.5 py-1 text-xs font-bold text-slate-600 bg-white hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-1 border border-slate-200"
+                              title="Открыть копию как новый черновик (без изменения реестра)"
                             >
-                              <Pencil className="w-3.5 h-3.5" />
-                              Изменить
+                              <Copy className="w-3.5 h-3.5" />
+                              Черновик
                             </button>
+                          )}
 
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(doc.id, doc.regNumber)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                              title="Удалить из реестра"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                          {isAdmin && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingDocId(doc.id);
+                                  setEditingDocData({ ...doc });
+                                }}
+                                className="px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors flex items-center gap-1"
+                                title="Редактировать запись"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Изменить
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(doc.id, doc.regNumber)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                                title="Удалить из реестра"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
