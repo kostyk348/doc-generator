@@ -137,7 +137,7 @@ export const generateDigitalSignatureKey = (): string => {
   const existingKeys = new Set<string>();
   if (typeof window !== 'undefined') {
     try {
-      const saved = localStorage.getItem('teplomash_doc_registry_v2');
+      const saved = localStorage.getItem('teplomash_registered_docs_registry_v3');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {

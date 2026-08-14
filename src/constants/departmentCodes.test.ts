@@ -125,3 +125,33 @@ describe('verifyRegistryIntegrity', () => {
     expect(verdict.valid).toBe(false);
   });
 });
+
+describe('регрессия: undefined-поля не ломают цепочку (баг "digitalSignatureKey: undefined")', () => {
+  it('запись с digitalSignatureKey: undefined проходит round-trip JSON.stringify', () => {
+    // Было: rechainRegistry в памяти считал хэш С undefined-полем, а JSON.stringify
+    // выбрасывал это поле при сохранении → хэш после чтения не совпадал → ложная
+    // ошибка целостности. Канон теперь игнорирует undefined, как и JSON.stringify.
+    const records = [
+      mkDoc({ regNumber: 'Д-2', digitalSignatureKey: undefined as unknown as string }),
+      mkDoc({ regNumber: 'Д-1' })
+    ];
+    const chained = rechainRegistry(records);
+    // симуляция localStorage: JSON round-trip выбрасывает undefined-поле
+    const roundTripped = JSON.parse(JSON.stringify(chained));
+    const verdict = verifyRegistryIntegrity(roundTripped);
+    expect(verdict.valid).toBe(true);
+  });
+
+  it('хэш записи не зависит от undefined-полей', () => {
+    const base = { id: 'fixed-id', regNumber: 'Д-1', registeredAt: 'FIXED-TIME' };
+    const a = rechainRegistry([mkDoc({ ...base, digitalSignatureKey: undefined as unknown as string })]);
+    const b = rechainRegistry([mkDoc({ ...base })]);
+    expect(a[0].hash).toBe(b[0].hash);
+  });
+
+  it('запись без ЭП и с ЭП — разные хэши (ключ реально влияет на цепочку)', () => {
+    const noKey = rechainRegistry([mkDoc({ regNumber: 'Д-1' })]);
+    const withKey = rechainRegistry([mkDoc({ regNumber: 'Д-1', digitalSignatureKey: 'AAAA-1234' })]);
+    expect(noKey[0].hash).not.toBe(withKey[0].hash);
+  });
+});

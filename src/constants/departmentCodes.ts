@@ -126,9 +126,16 @@ export const fnv1a64Hex = (str: string): string => {
 
 export const GENESIS_HASH = '0'.repeat(16);
 
-/** Каноническая сериализация записи БЕЗ hash/prevHash (стабильный порядок ключей). */
+/** Каноническая сериализация записи БЕЗ hash/prevHash (стабильный порядок ключей).
+ *  undefined-поля исключаются — точно так же, как их выбрасывает JSON.stringify
+ *  при сохранении в localStorage. Иначе хэш, посчитанный в памяти (с
+ *  `digitalSignatureKey: undefined`), не совпадёт с хэшем после чтения из
+ *  хранилища, где поля нет → целостность ложно нарушена. */
 const canonicalRegistryRecord = (doc: RegisteredDocument): string => {
-  const keys = Object.keys(doc).filter(k => k !== 'hash' && k !== 'prevHash').sort();
+  const keys = Object.keys(doc)
+    .filter(k => k !== 'hash' && k !== 'prevHash')
+    .filter(k => (doc as unknown as Record<string, unknown>)[k] !== undefined)
+    .sort();
   const record = doc as unknown as Record<string, unknown>;
   const parts = keys.map(k => `${k}:${JSON.stringify(record[k])}`);
   return parts.join('|');
@@ -247,17 +254,48 @@ export const setDepartmentSeq = (deptCode: string, seq: number): void => {
    REGISTERED DOCUMENTS DATABASE (PERSISTENT LOG & UNIQUE NUMBER GUARANTEE)
    ========================================================================= */
 
+/** Канон со старым поведением (undefined-поля входят) — для детекта записей,
+ *  хэшированных до фикса канона (баг: undefined-поле ломало цепочку). */
+const legacyCanonicalRegistryRecord = (doc: RegisteredDocument): string => {
+  const keys = Object.keys(doc)
+    .filter(k => k !== 'hash' && k !== 'prevHash')
+    .sort();
+  const record = doc as unknown as Record<string, unknown>;
+  const parts = keys.map(k => `${k}:${JSON.stringify(record[k])}`);
+  return parts.join('|');
+};
+
+/** true, если запись была захэширована старым (до фикса) каноном — т.е. сломан
+ *  не из-за ручной правки, а из-за бага с undefined-полями. */
+const wasHashedWithLegacyCanon = (doc: RegisteredDocument): boolean => {
+  if (!doc.hash || !doc.prevHash) return false;
+  const legacy = fnv1a64Hex(legacyCanonicalRegistryRecord(doc) + ':' + (doc.prevHash || GENESIS_HASH));
+  return legacy === doc.hash;
+};
+
 export const getDocumentRegistry = (): RegisteredDocument[] => {
   try {
     const saved = localStorage.getItem(DOC_REGISTRY_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed)) return [];
       // Миграция: если есть записи без hash (старый формат) — перестроить цепочку
-      const needsRechain = !Array.isArray(parsed) || parsed.some((r: RegisteredDocument) => !r.hash || !r.prevHash);
+      const needsRechain = parsed.some((r: RegisteredDocument) => !r.hash || !r.prevHash);
       if (needsRechain) {
-        const chained = rechainRegistry(Array.isArray(parsed) ? parsed : []);
+        const chained = rechainRegistry(parsed);
         saveDocumentRegistry(chained);
         return chained;
+      }
+      // Миграция бага undefined-полей: все записи цепочки валидны только по
+      // старому канону → сломаны самим приложением, а не ручной правкой → пересобрать.
+      const verdict = verifyRegistryIntegrity(parsed);
+      if (!verdict.valid) {
+        const allBrokenByLegacy = parsed.every(doc => wasHashedWithLegacyCanon(doc));
+        if (allBrokenByLegacy) {
+          const chained = rechainRegistry(parsed);
+          saveDocumentRegistry(chained);
+          return chained;
+        }
       }
       return parsed;
     }
@@ -330,7 +368,7 @@ export const registerDocumentInDb = (params: {
       hour: '2-digit', minute: '2-digit'
     }),
     registeredByRole: params.role || 'user',
-    digitalSignatureKey: params.digitalSignatureKey
+    ...(params.digitalSignatureKey ? { digitalSignatureKey: params.digitalSignatureKey } : {})
   };
 
   const updatedRegistry = [registeredDoc, ...registry];
