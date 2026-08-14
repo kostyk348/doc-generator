@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { readRole } from '../utils/authUtils';
 
 export interface PortalUser {
   username?: string;
@@ -67,7 +68,7 @@ export function usePortalAuth(requiredPermission: string = 'DOC_GENERATOR_ACCESS
         // ВНИМАНИЕ: Данная ветка является временной интерфейсной заглушкой (mock) для тестирования верстки и ролей в UI.
         // Она не проверяет криптографическую подпись токена и не осуществляет валидацию на бэкенде.
         // Будет заменена на полноценную проверку при интеграции с боевым portal-core / RBAC бэкендом tmdata.
-        const storedRole = localStorage.getItem('doc_gen_user_role');
+        const storedRole = readRole();
 
         if (activeToken || storedRole) {
           if (isMounted) {

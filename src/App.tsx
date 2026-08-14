@@ -21,6 +21,7 @@ import { TeplomashEmployee, TEPLOMASH_EMPLOYEES, sanitizeEmployeeDepartments } f
 import { SAMPLE_STAMPS } from './constants/presets';
 import { useMicroserviceBridge } from './hooks/useMicroserviceBridge';
 import { useDebouncedValue } from './hooks/useDebouncedValue';
+import { readRole, writeRole, clearRole } from './utils/authUtils';
 import { microserviceBridge } from './services/microserviceBridge';
 import { buildStampSvg } from './utils/stampUtils';
 import { downloadDocumentAsEml } from './utils/emlUtils';
@@ -64,28 +65,23 @@ import {
 const STORAGE_KEY = 'official_doc_builder_data';
 const DRAFTS_KEY = 'official_doc_drafts_history';
 const EMPLOYEES_KEY = 'teplomash_employees_db';
-const ROLE_KEY = 'doc_gen_user_role';
 
 export default function App() {
   // Portal JWT Auth Gate Hook
   const portalAuthState = usePortalAuth('DOC_GENERATOR_ACCESS');
 
   // Auth & User Role State
-  const [userRole, setUserRole] = useState<'admin' | 'user' | null>(() => {
-    const saved = localStorage.getItem(ROLE_KEY);
-    if (saved === 'admin' || saved === 'user') return saved;
-    return null; // triggers AuthModal on initial load if no role selected
-  });
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => !userRole);
+  const [userRole, setUserRole] = useState<'admin' | 'user' | null>(() => readRole());
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => !readRole());
 
   const handleSelectRole = (role: 'admin' | 'user') => {
     setUserRole(role);
-    localStorage.setItem(ROLE_KEY, role);
+    writeRole(role);
   };
 
   const handleLogoutRole = () => {
     setUserRole(null);
-    localStorage.removeItem(ROLE_KEY);
+    clearRole();
     setIsAuthModalOpen(true);
   };
 
