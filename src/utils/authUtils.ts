@@ -46,6 +46,10 @@ export const readRole = (): 'admin' | 'user' | null => {
 export const writeRole = (role: 'admin' | 'user'): void => {
   try {
     localStorage.setItem(ROLE_KEY, signRole(role));
+    // Уведомляем гейт авторизации о смене роли (см. usePortalAuth)
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('doc-role-changed'));
+    }
   } catch {
     /* noop */
   }
@@ -55,6 +59,9 @@ export const writeRole = (role: 'admin' | 'user'): void => {
 export const clearRole = (): void => {
   try {
     localStorage.removeItem(ROLE_KEY);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('doc-role-changed'));
+    }
   } catch {
     /* noop */
   }

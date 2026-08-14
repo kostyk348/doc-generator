@@ -57,6 +57,11 @@ app.whenReady().then(() => {
     try {
       const parsedUrl = new URL(request.url);
       let pathname = decodeURIComponent(parsedUrl.pathname);
+      // Vite собирает с base '/docgen/' (контракт веб-деплоя на портал tmdata).
+      // В Electron файлы лежат в корне dist/ — отбрасываем префикс /docgen.
+      if (pathname === '/docgen' || pathname.startsWith('/docgen/')) {
+        pathname = pathname.slice('/docgen'.length);
+      }
       if (pathname === '/' || !pathname) {
         pathname = '/index.html';
       }
