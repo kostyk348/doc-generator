@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Search, 
@@ -15,7 +15,10 @@ import {
   AlertTriangle,
   RefreshCw,
   Clock,
-  Sparkles
+  Sparkles,
+  Download,
+  Printer,
+  Filter
 } from 'lucide-react';
 import { 
   RegisteredDocument, 
@@ -47,6 +50,7 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
   const [editingDocData, setEditingDocData] = useState<RegisteredDocument | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [chainStatus, setChainStatus] = useState<{ valid: boolean; total: number; checked: boolean }>({ valid: true, total: 0, checked: false });
+  const [deptFilter, setDeptFilter] = useState<string>('all');
 
   const isAdmin = userRole === 'admin';
 
@@ -59,21 +63,32 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  const availableDepts = useMemo(() => {
+    const depts = new Set<string>();
+    for (const doc of registryList) {
+      if (doc.deptName) depts.add(doc.deptName);
+    }
+    return Array.from(depts).sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [registryList]);
 
-  const filteredDocs = registryList.filter(doc => {
+  const filteredDocs = useMemo(() => {
     const q = search.toLowerCase().trim();
-    if (!q) return true;
-    return (
-      doc.regNumber.toLowerCase().includes(q) ||
-      doc.subject.toLowerCase().includes(q) ||
-      doc.composerName.toLowerCase().includes(q) ||
-      doc.recipientName.toLowerCase().includes(q) ||
-      doc.deptCode.toLowerCase().includes(q) ||
-      doc.deptName.toLowerCase().includes(q) ||
-      (doc.digitalSignatureKey && doc.digitalSignatureKey.toLowerCase().includes(q))
-    );
-  });
+    return registryList.filter(doc => {
+      if (deptFilter !== 'all' && doc.deptName !== deptFilter) return false;
+      if (!q) return true;
+      return (
+        doc.regNumber.toLowerCase().includes(q) ||
+        doc.subject.toLowerCase().includes(q) ||
+        doc.composerName.toLowerCase().includes(q) ||
+        doc.recipientName.toLowerCase().includes(q) ||
+        doc.deptCode.toLowerCase().includes(q) ||
+        doc.deptName.toLowerCase().includes(q) ||
+        (doc.digitalSignatureKey && doc.digitalSignatureKey.toLowerCase().includes(q))
+      );
+    });
+  }, [registryList, search, deptFilter]);
+
+  if (!isOpen) return null;
 
   const handleDelete = (id: string, regNumber: string) => {
     if (!isAdmin) {
@@ -103,10 +118,84 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
   const handleSaveEdit = () => {
     if (!editingDocData) return;
     updateRegisteredDocumentInDb(editingDocData);
-    setRegistryList(getDocumentRegistry());
+    const updated = getDocumentRegistry();
+    setRegistryList(updated);
+    // После легального редактирования цепочка перестроена — обновляем статус целостности
+    const verdict = verifyRegistryIntegrity(updated);
+    setChainStatus({ valid: verdict.valid, total: verdict.total, checked: true });
     setEditingDocId(null);
     setEditingDocData(null);
     setStatusMsg({ type: 'success', text: `Изменения документа № ${editingDocData.regNumber} сохранены.` });
+  };
+
+  const handleExportCsv = () => {
+    const rows = filteredDocs.map(doc => ({
+      'Исходящий №': doc.regNumber,
+      'Дата': doc.date,
+      'Отдел': doc.deptName,
+      'Код': doc.deptCode,
+      'Составитель': doc.composerName,
+      'Адресат': doc.recipientName,
+      'Тема': doc.subject,
+      'Ключ ЭП': doc.digitalSignatureKey || '',
+      'Зарегистрировано': doc.registeredAt
+    }));
+    const headers = Object.keys(rows[0] || {});
+    const escapeCsv = (v: string) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lines = rows.map(r => headers.map(h => escapeCsv(r[h])).join(';'));
+    const csv = '\uFEFF' + [headers.map(escapeCsv).join(';'), ...lines].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Реестр_исходящих_писем_${new Date().toLocaleDateString('ru-RU').replace(/\./g, '-')}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    setStatusMsg({ type: 'success', text: `Экспортировано записей: ${rows.length}. Файл CSV сохранён в Загрузки.` });
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) return;
+    const rowsHtml = filteredDocs.map(doc => `
+      <tr>
+        <td>${doc.regNumber}</td>
+        <td>${doc.date}</td>
+        <td>${doc.deptName}</td>
+        <td>${doc.composerName}</td>
+        <td>${doc.recipientName}</td>
+        <td>${doc.subject}</td>
+      </tr>`).join('');
+    printWindow.document.write(`<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Реестр исходящих писем</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
+    h1 { font-size: 16px; text-align: center; margin-bottom: 4px; }
+    .sub { text-align: center; font-size: 12px; color: #475569; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    th, td { border: 1px solid #94a3b8; padding: 5px 7px; text-align: left; vertical-align: top; }
+    th { background: #e2e8f0; font-size: 10px; text-transform: uppercase; }
+    .meta { font-size: 10px; color: #64748b; margin-top: 16px; text-align: right; }
+    @media print { .no-print { display: none; } }
+  </style>
+</head>
+<body>
+  <button class="no-print" onclick="window.print()" style="position:fixed;top:12px;right:12px;padding:8px 16px;cursor:pointer;">Печать</button>
+  <h1>Единый реестр исходящих писем</h1>
+  <div class="sub">АО «НПО «Тепломаш» · ГОСТ Р 7.0.97–2025 · Записей: ${filteredDocs.length}</div>
+  <table>
+    <thead><tr><th>№</th><th>Дата</th><th>Отдел</th><th>Составитель</th><th>Адресат</th><th>Тема</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="meta">Сформировано ${new Date().toLocaleString('ru-RU')}</div>
+</body>
+</html>`);
+    printWindow.document.close();
   };
 
   return (
@@ -142,7 +231,7 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
 
         {/* Toolbar & Search Bar */}
         <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-wrap items-center justify-between gap-3 shrink-0">
-          <div className="relative flex-1 min-w-[260px]">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -154,6 +243,40 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <select
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className="text-xs py-2 px-2.5 rounded-lg border border-slate-300 bg-white font-medium text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Фильтр по отделу"
+            >
+              <option value="all">Все отделы</option>
+              {availableDepts.map(d => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={filteredDocs.length === 0}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold text-xs rounded-lg border border-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Выгрузить отфильтрованный список в CSV (Excel)"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>CSV</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePrint}
+              disabled={filteredDocs.length === 0}
+              className="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-bold text-xs rounded-lg border border-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Печать отфильтрованного реестра"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Печать</span>
+            </button>
+
             {isAdmin ? (
               <button
                 type="button"
@@ -234,6 +357,12 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
 
         {/* Documents Registry List Body */}
         <div className="p-4 overflow-y-auto flex-1 space-y-3">
+          {registryList.length > 0 && (
+            <div className="text-[10px] text-slate-400 font-medium pb-1">
+              Показано: <strong className="text-slate-600">{filteredDocs.length}</strong> из {registryList.length}
+              {deptFilter !== 'all' && <> (фильтр: {deptFilter})</>}
+            </div>
+          )}
           {filteredDocs.length === 0 ? (
             <div className="py-16 text-center text-slate-400 space-y-2">
               <FileText className="w-12 h-12 mx-auto text-slate-300 stroke-[1.5]" />
