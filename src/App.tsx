@@ -20,6 +20,7 @@ import { ValidationModal } from './components/ValidationModal';
 import { TeplomashEmployee, TEPLOMASH_EMPLOYEES, sanitizeEmployeeDepartments } from './constants/teplomashEmployees';
 import { SAMPLE_STAMPS } from './constants/presets';
 import { useMicroserviceBridge } from './hooks/useMicroserviceBridge';
+import { useDebouncedValue } from './hooks/useDebouncedValue';
 import { microserviceBridge } from './services/microserviceBridge';
 import { buildStampSvg } from './utils/stampUtils';
 import { downloadDocumentAsEml } from './utils/emlUtils';
@@ -196,11 +197,13 @@ export default function App() {
     return [];
   });
 
-  // Auto-save active document to local storage
+  // Auto-save active document to local storage (debounced: не пишем localStorage
+  // и не шлём postMessage на каждый введённый символ)
+  const debouncedDocData = useDebouncedValue(docData, 400);
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(docData));
-    microserviceBridge.emit('DOCUMENT_CHANGED', docData);
-  }, [docData]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(debouncedDocData));
+    microserviceBridge.emit('DOCUMENT_CHANGED', debouncedDocData);
+  }, [debouncedDocData]);
 
   // Microfrontend / Microservice PostMessage Bridge Listener
   useMicroserviceBridge({

@@ -9,7 +9,7 @@ interface DocumentPreviewProps {
   scale?: number; // Zoom level e.g. 1.0, 0.9, 1.1
 }
 
-export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 1.0 }) => {
+export const DocumentPreview: React.FC<DocumentPreviewProps> = React.memo(({ data, scale = 1.0 }) => {
   const { header, recipient, docType, docSubject, date, refNumber, inRefNumber, city, content, signature, fontFamily, fontSize, lineSpacing, margins } = data;
 
   // Determine effective outgoing registration number (saved or dynamically projected for draft)
@@ -241,4 +241,4 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
       </div>
     </div>
   );
-};
+});
