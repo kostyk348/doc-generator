@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DocumentData } from '../types';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
 import { getInitialBlankDocument } from '../constants/presets';
@@ -150,6 +150,45 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
   const [editingDocData, setEditingDocData] = useState<RegisteredDocument | null>(null);
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState<boolean>(false);
+
+  // Autocomplete state for recipient name field
+  const [recipientSuggestOpen, setRecipientSuggestOpen] = useState<boolean>(false);
+  const [recipientSuggestIdx, setRecipientSuggestIdx] = useState<number>(0);
+
+  const recipientSuggestions = useMemo(() => {
+    if (!isInternal) return [];
+    const q = data.recipient.name.trim().toLowerCase();
+    if (q.length < 2) return [];
+    return employeeList
+      .filter(emp => {
+        const haystack = [emp.shortName, emp.dativeName, emp.fullName, emp.position, emp.department]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(q);
+      })
+      .slice(0, 8);
+  }, [isInternal, data.recipient.name, employeeList]);
+
+  const applyRecipientSuggestion = (emp: TeplomashEmployee) => {
+    const pos = emp.dativePosition || emp.position;
+    const formattedPos = (emp.department && !pos.toLowerCase().includes(emp.department.toLowerCase()))
+      ? `${pos} (${emp.department})`
+      : pos;
+    onChange({
+      ...data,
+      recipient: {
+        ...data.recipient,
+        recipientType: 'internal',
+        position: formattedPos,
+        organization: emp.organization,
+        name: emp.dativeName || emp.shortName,
+        email: emp.email
+      }
+    });
+    setRecipientSuggestOpen(false);
+    setRecipientSuggestIdx(0);
+  };
 
   const [selectedDeptCode, setSelectedDeptCode] = useState<string>(() => {
     if (parsedRef?.code) return parsedRef.code;
@@ -598,7 +637,7 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 />
               </div>
 
-              <div>
+              <div className="relative">
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>ФИО сотрудника (в дательном падеже)</span>
                   {data.recipient.name.trim() && (
@@ -616,14 +655,57 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 <input
                   type="text"
                   value={data.recipient.name}
-                  onChange={(e) => handleRecipientChange('name', e.target.value)}
-                  placeholder="Например: Романову А. А."
+                  onChange={(e) => {
+                    handleRecipientChange('name', e.target.value);
+                    setRecipientSuggestOpen(true);
+                    setRecipientSuggestIdx(0);
+                  }}
+                  onFocus={() => setRecipientSuggestOpen(true)}
+                  onBlur={() => setTimeout(() => setRecipientSuggestOpen(false), 150)}
+                  onKeyDown={(e) => {
+                    if (!recipientSuggestOpen || recipientSuggestions.length === 0) return;
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setRecipientSuggestIdx(i => (i + 1) % recipientSuggestions.length);
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setRecipientSuggestIdx(i => (i - 1 + recipientSuggestions.length) % recipientSuggestions.length);
+                    } else if (e.key === 'Enter' && recipientSuggestions[recipientSuggestIdx]) {
+                      e.preventDefault();
+                      applyRecipientSuggestion(recipientSuggestions[recipientSuggestIdx]);
+                    } else if (e.key === 'Escape') {
+                      setRecipientSuggestOpen(false);
+                    }
+                  }}
+                  placeholder="Начните вводить ФИО — подсказки из справочника"
                   className={`w-full text-xs p-2.5 rounded border transition-all font-sans outline-none ${
                     fieldErrors.recipientName
                       ? 'border-rose-500 bg-rose-50/30 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
                       : 'border-slate-300 focus:ring-1 focus:ring-indigo-500'
                   }`}
                 />
+                {recipientSuggestOpen && recipientSuggestions.length > 0 && (
+                  <ul className="absolute z-30 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border border-indigo-100 bg-white shadow-lg animate-in fade-in zoom-in-95 duration-100">
+                    {recipientSuggestions.map((emp, idx) => (
+                      <li key={emp.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => { e.preventDefault(); applyRecipientSuggestion(emp); }}
+                          className={`w-full text-left px-3 py-2 flex items-center justify-between gap-2 transition-colors ${
+                            idx === recipientSuggestIdx ? 'bg-indigo-50' : 'bg-white hover:bg-indigo-50'
+                          }`}
+                        >
+                          <span className="text-xs font-semibold text-slate-800">
+                            {emp.dativeName || emp.shortName}
+                          </span>
+                          <span className="text-[10px] text-slate-500 text-right">
+                            {emp.position}{emp.department ? ` · ${emp.department}` : ''}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {fieldErrors.recipientName && (
                   <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1 animate-in fade-in duration-150">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-500" />
