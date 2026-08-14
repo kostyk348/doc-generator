@@ -58,6 +58,7 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [chainStatus, setChainStatus] = useState<{ valid: boolean; total: number; checked: boolean }>({ valid: true, total: 0, checked: false });
   const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'today' | 'week' | 'month'>('all');
   const [viewMode, setViewMode] = useState<'list' | 'stats'>('list');
 
   const isAdmin = userRole === 'admin';
@@ -81,8 +82,27 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
 
   const filteredDocs = useMemo(() => {
     const q = search.toLowerCase().trim();
+    // Разбор даты 'ДД.ММ.ГГГГ' → Date для период-фильтра
+    const parseRuDate = (s: string): Date | null => {
+      const m = /^(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(s || '');
+      if (!m) return null;
+      const d = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - 6);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     return registryList.filter(doc => {
       if (deptFilter !== 'all' && doc.deptName !== deptFilter) return false;
+      if (periodFilter !== 'all') {
+        const d = parseRuDate(doc.date);
+        if (!d) return false;
+        if (periodFilter === 'today' && d.getTime() !== now.getTime()) return false;
+        if (periodFilter === 'week' && d < weekStart) return false;
+        if (periodFilter === 'month' && d < monthStart) return false;
+      }
       if (!q) return true;
       return (
         doc.regNumber.toLowerCase().includes(q) ||
@@ -94,7 +114,7 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
         (doc.digitalSignatureKey && doc.digitalSignatureKey.toLowerCase().includes(q))
       );
     });
-  }, [registryList, search, deptFilter]);
+  }, [registryList, search, deptFilter, periodFilter]);
 
   const stats = useMemo(() => computeRegistryStats(registryList), [registryList]);
 
@@ -224,6 +244,12 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
                 <span className="text-[10px] bg-indigo-500/30 border border-indigo-400/40 text-indigo-200 px-2 py-0.5 rounded-full font-medium">
                   {registryList.length} записей
                 </span>
+                <span
+                  className="text-[10px] bg-emerald-500/25 border border-emerald-400/40 text-emerald-200 px-2 py-0.5 rounded-full font-medium"
+                  title="Сколько документов зарегистрировано сегодня"
+                >
+                  сегодня: {stats.today}
+                </span>
               </h3>
               <p className="text-xs text-slate-300 mt-0.5">
                 Единая база исходящих документов АО «НПО «Тепломаш» (ГОСТ Р 7.0.97–2025)
@@ -280,6 +306,18 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
 
             {viewMode === 'list' && (
             <>
+            <select
+              value={periodFilter}
+              onChange={(e) => setPeriodFilter(e.target.value as 'all' | 'today' | 'week' | 'month')}
+              className="text-xs py-2 px-2.5 rounded-lg border border-slate-300 bg-white font-medium text-slate-700 outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Фильтр по дате документа"
+            >
+              <option value="all">Все даты</option>
+              <option value="today">За сегодня</option>
+              <option value="week">За 7 дней</option>
+              <option value="month">За месяц</option>
+            </select>
+
             <select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
@@ -525,6 +563,8 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
           ) : registryList.length > 0 && (
             <div className="text-[10px] text-slate-400 font-medium pb-1">
               Показано: <strong className="text-slate-600">{filteredDocs.length}</strong> из {registryList.length}
+              {periodFilter !== 'all' && <> за период «{periodFilter === 'today' ? 'сегодня' : periodFilter === 'week' ? '7 дней' : 'месяц'}»</>}
+              {deptFilter !== 'all' && <> · отдел: {deptFilter}</>}
               {deptFilter !== 'all' && <> (фильтр: {deptFilter})</>}
             </div>
           )}

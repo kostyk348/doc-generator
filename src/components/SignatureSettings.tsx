@@ -511,24 +511,6 @@ export const SignatureSettings: React.FC<SignatureSettingsProps> = ({
                   <span className="font-mono font-bold text-indigo-950 bg-indigo-100/80 px-1.5 py-0.5 rounded border border-indigo-300">
                     {signature.digitalSignatureKey || generateDigitalSignatureKey()}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const newKey = generateDigitalSignatureKey();
-                      onChange({
-                        ...signature,
-                        useDigitalSignature: true,
-                        digitalSignatureKey: newKey,
-                        digitalSignatureDate: new Date().toLocaleString('ru-RU', {
-                          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                        })
-                      });
-                    }}
-                    className="ml-2 px-2 py-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded border border-indigo-200 transition-colors"
-                    title="Сгенерировать новый уникальный ключ подписи"
-                  >
-                    Пересоздать ключ
-                  </button>
                 </div>
                 <div>
                   <span className="text-slate-500 font-medium">Владелец ключа:</span>{' '}

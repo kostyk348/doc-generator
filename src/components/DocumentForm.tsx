@@ -150,6 +150,7 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
   const [editingDocData, setEditingDocData] = useState<RegisteredDocument | null>(null);
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState<boolean>(false);
+  const [publishWarnings, setPublishWarnings] = useState<string[]>([]);
 
   // Autocomplete state for recipient name field
   const [recipientSuggestOpen, setRecipientSuggestOpen] = useState<boolean>(false);
@@ -251,6 +252,22 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
         return;
       }
     }
+
+    // Контроль полноты перед публикацией (ГОСТ: подпись + печать обязательны)
+    const warnings: string[] = [];
+    const sig = data.signature;
+    const hasGraphicSignature = sig.type === 'image' && !!sig.imageUrl || sig.type === 'canvas';
+    const hasDigitalSignature = !!sig.useDigitalSignature;
+    if (!hasGraphicSignature && !hasDigitalSignature) {
+      warnings.push('В документе отсутствует подпись (графическая или ЭП).');
+    }
+    if (sig.showStamp && !sig.stampImageUrl) {
+      warnings.push('Выбрана печать, но изображение печати не загружено.');
+    }
+    if (!data.recipient.name && !data.recipient.organization) {
+      warnings.push('Не указан адресат (получатель документа).');
+    }
+    setPublishWarnings(warnings);
 
     // Open warning confirmation modal
     setIsPublishConfirmOpen(true);
@@ -1659,6 +1676,21 @@ export const DocumentForm: React.FC<DocumentFormProps> = ({
                 </p>
               </div>
             </div>
+
+            {publishWarnings.length > 0 && (
+              <div className="bg-red-50/70 border border-red-200 rounded-xl p-3.5 text-xs space-y-1.5 leading-relaxed">
+                <div className="font-bold text-red-950 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-red-600" />
+                  <span>Проверьте документ перед публикацией:</span>
+                </div>
+                {publishWarnings.map((w, i) => (
+                  <div key={i} className="flex items-start gap-1.5 text-red-800 text-[11px] pl-1">
+                    <span className="text-red-600 font-bold">•</span>
+                    <span>{w}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 text-xs text-slate-700 space-y-2 leading-relaxed">
               <div className="font-bold text-amber-950 flex items-center gap-1.5">

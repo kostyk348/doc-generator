@@ -2,6 +2,7 @@ import { RegisteredDocument } from '../types';
 
 export interface RegistryStats {
   total: number;
+  today: number;
   byMonth: { key: string; label: string; count: number }[];
   byDept: { name: string; count: number }[];
   byComposer: { name: string; count: number }[];
@@ -51,8 +52,11 @@ export const computeRegistryStats = (records: RegisteredDocument[]): RegistrySta
   const byComposerMap = new Map<string, number>();
   const byTypeMap = new Map<string, number>();
   let lastRegisteredAt: string | null = null;
+  const todayStr = new Date().toLocaleDateString('ru-RU');
+  let todayCount = 0;
 
   for (const doc of records) {
+    if (doc.date === todayStr) todayCount++;
     // по месяцу регистрации (docs.date — дата документа)
     const parts = parseDateParts(doc.date);
     if (parts) {
@@ -96,6 +100,7 @@ export const computeRegistryStats = (records: RegisteredDocument[]): RegistrySta
 
   return {
     total: records.length,
+    today: todayCount,
     byMonth,
     byDept,
     byComposer,

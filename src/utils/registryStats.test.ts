@@ -33,6 +33,17 @@ describe('computeRegistryStats', () => {
     expect(s.total).toBe(3);
   });
 
+  it('today: документы с датой = сегодня учитываются', () => {
+    const today = new Date().toLocaleDateString('ru-RU');
+    const s = computeRegistryStats([
+      mkDoc({ date: today }),
+      mkDoc({ date: today }),
+      mkDoc({ date: '01.01.2000' }),
+    ]);
+    expect(s.total).toBe(3);
+    expect(s.today).toBe(2);
+  });
+
   it('группировка по отделам', () => {
     const s = computeRegistryStats([
       mkDoc({ deptName: 'ИТ, автоматика, ПО' }),
