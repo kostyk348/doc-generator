@@ -6,6 +6,29 @@ export interface ValidationError {
   message: string;
 }
 
+/**
+ * Единый справочник массовых адресатов («всем сотрудникам», «всем партнёрам»).
+ * Используется и в validateDocument, и в getFieldErrors — один источник правды.
+ */
+export const MASS_RECIPIENT_KEYWORDS: readonly string[] = [
+  'всем сотрудникам',
+  'всем работникам',
+  'все сотрудники',
+  'все работники',
+  'всем подразделениям',
+  'все подразделения',
+  'всем партнерам',
+  'все партнеры',
+  'все партнеры компании',
+  'всем партнерам компании',
+  'руководителям подразделений',
+  'всем филиалам',
+  'всем контрагентам'
+];
+
+export const isMassRecipientText = (fullRecipientText: string): boolean =>
+  MASS_RECIPIENT_KEYWORDS.some(kw => fullRecipientText.toLowerCase().includes(kw));
+
 export function isValidEmail(email: string | undefined): boolean {
   if (!email || !email.trim()) return true; // empty email is valid if optional
   // Standard RFC 5322 regex for basic email validation
@@ -92,23 +115,7 @@ export function validateDocument(doc: DocumentData): ValidationError[] {
   }
 
   // EXCEPTION KEYWORDS ("письмо адресовано всем сотрудникам компании либо всем партнерам"):
-  const massKeywords = [
-    'всем сотрудникам',
-    'всем работникам',
-    'все сотрудники',
-    'все работники',
-    'всем подразделениям',
-    'все подразделения',
-    'всем партнерам',
-    'все партнеры',
-    'все партнеры компании',
-    'всем партнерам компании',
-    'руководителям подразделений',
-    'всем филиалам',
-    'всем контрагентам'
-  ];
-
-  const isMassRecipient = massKeywords.some(kw => fullRecipientText.includes(kw));
+  const isMassRecipient = isMassRecipientText(fullRecipientText);
 
   if (!isMassRecipient) {
     const isInternal = doc.recipient.recipientType !== 'external';
@@ -177,13 +184,7 @@ export function getFieldErrors(doc: DocumentData): FieldErrors {
   const recName = (doc.recipient.name || '').trim();
   const fullRecipientText = `${recOrg} ${recPos} ${recName}`.toLowerCase();
 
-  const massKeywords = [
-    'всем сотрудникам', 'всем работникам', 'все сотрудники', 'все работники',
-    'всем подразделениям', 'все подразделения', 'всем партнерам', 'все партнеры',
-    'все партнеры компании', 'всем партнерам компании', 'руководителям подразделений',
-    'всем филиалам', 'всем контрагентам'
-  ];
-  const isMassRecipient = massKeywords.some(kw => fullRecipientText.includes(kw));
+  const isMassRecipient = isMassRecipientText(fullRecipientText);
 
   if (!isMassRecipient) {
     const isInternal = doc.recipient.recipientType !== 'external';

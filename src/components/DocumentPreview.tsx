@@ -2,6 +2,7 @@ import React from 'react';
 import { DocumentData } from '../types';
 import { buildStampSvg, renderStampToCanvasPng } from '../utils/stampUtils';
 import { generateDocumentNumber, guessDepartmentCode, getNextDepartmentSeq } from '../constants/departmentCodes';
+import { sanitizeHtml } from '../utils/sanitizeUtils';
 
 interface DocumentPreviewProps {
   data: DocumentData;
@@ -158,7 +159,7 @@ export const DocumentPreview: React.FC<DocumentPreviewProps> = ({ data, scale = 
           >
             {content ? (
               <div 
-                dangerouslySetInnerHTML={{ __html: content }}
+                dangerouslySetInnerHTML={{ __html: sanitizeHtml(content) }}
                 className="[&_p]:mb-3 [&_p]:indent-6 [&_p]:break-words [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-8 [&_ol]:list-decimal [&_ol]:pl-8 [&_strong]:font-bold"
               />
             ) : (

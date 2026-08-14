@@ -12,7 +12,8 @@
     "electron:dev": "vite & electron .",
     "dist": "vite build && electron-builder --win portable",
     "start": "node dist/server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
   },
   "build": {
     "appId": "com.gost.docgenerator",
@@ -27,7 +28,9 @@
       "package.json"
     ],
     "win": {
-      "target": ["portable"]
+      "target": [
+        "portable"
+      ]
     }
   },
   "dependencies": {
@@ -58,6 +61,7 @@
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "vite": "^6.2.3",
+    "vitest": "^4.1.10"
   }
 }

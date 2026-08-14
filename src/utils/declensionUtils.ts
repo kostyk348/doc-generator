@@ -336,12 +336,13 @@ export function declinePatronymic(patronymic: string, targetCase: GrammarCase): 
 
   // Already in Dative check
   if (targetCase === 'dative') {
-    if (lower.endsWith('вичу') || lower.endsWith('личу') || lower.endsWith('вне') || lower.endsWith('чне')) {
+    if (lower.endsWith('ичу') || lower.endsWith('вне') || lower.endsWith('чне')) {
       return pat;
     }
   }
 
-  if (lower.endsWith('вич') || lower.endsWith('лич')) {
+  // Все русские мужские отчества оканчиваются на -ич (Иванович, Ильич, Кузьмич, Никитич)
+  if (lower.endsWith('ич')) {
     switch (targetCase) {
       case 'genitive':
       case 'accusative':

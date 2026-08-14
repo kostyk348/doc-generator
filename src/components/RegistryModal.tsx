@@ -22,7 +22,10 @@ import {
   getDocumentRegistry, 
   updateRegisteredDocumentInDb, 
   deleteRegisteredDocumentFromDb, 
-  clearDocumentRegistryDb 
+  clearDocumentRegistryDb,
+  verifyRegistryIntegrity,
+  rechainRegistry,
+  fnv1a64Hex
 } from '../constants/departmentCodes';
 
 interface RegistryModalProps {
@@ -43,12 +46,16 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
   const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [editingDocData, setEditingDocData] = useState<RegisteredDocument | null>(null);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [chainStatus, setChainStatus] = useState<{ valid: boolean; total: number; checked: boolean }>({ valid: true, total: 0, checked: false });
 
   const isAdmin = userRole === 'admin';
 
   useEffect(() => {
     if (isOpen) {
-      setRegistryList(getDocumentRegistry());
+      const registry = getDocumentRegistry();
+      setRegistryList(registry);
+      const verdict = verifyRegistryIntegrity(registry);
+      setChainStatus({ valid: verdict.valid, total: verdict.total, checked: true });
     }
   }, [isOpen]);
 
@@ -180,6 +187,48 @@ export const RegistryModal: React.FC<RegistryModalProps> = ({
             <button onClick={() => setStatusMsg(null)} className="p-0.5 hover:opacity-75">
               <X className="w-3.5 h-3.5" />
             </button>
+          </div>
+        )}
+
+        {/* Hash-Chain Integrity Banner (tamper-evident реестр) */}
+        {chainStatus.checked && (
+          <div className={`p-3 text-xs flex items-center justify-between gap-3 shrink-0 border-b ${
+            chainStatus.valid
+              ? 'bg-emerald-50/70 text-emerald-800 border-emerald-100'
+              : 'bg-rose-50 text-rose-800 border-rose-200'
+          }`}>
+            <div className="flex items-center gap-2 min-w-0">
+              <Shield className="w-4 h-4 shrink-0" />
+              <span className="font-bold shrink-0">Целостность реестра:</span>
+              {chainStatus.valid ? (
+                <span className="flex items-center gap-1.5 font-semibold">
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  цепочка не нарушена ({chainStatus.total} записей)
+                </span>
+              ) : (
+                <span className="font-semibold">
+                  НАРУШЕНА — записи изменялись в обход приложения!
+                </span>
+              )}
+            </div>
+            {!chainStatus.valid && isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Перестроить хеш-цепочку реестра заново? Это подтвердит текущее состояние реестра как эталонное.')) {
+                    const rebuilt = rechainRegistry(registryList);
+                    localStorage.setItem('teplomash_registered_docs_registry_v3', JSON.stringify(rebuilt));
+                    setRegistryList(getDocumentRegistry());
+                    const verdict = verifyRegistryIntegrity(getDocumentRegistry());
+                    setChainStatus({ valid: verdict.valid, total: verdict.total, checked: true });
+                    setStatusMsg({ type: 'success', text: 'Хеш-цепочка реестра перестроена. Реестр снова эталонный.' });
+                  }
+                }}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-lg shrink-0"
+              >
+                Перестроить цепочку
+              </button>
+            )}
           </div>
         )}
 

@@ -2,6 +2,7 @@ import { DocumentData } from '../types';
 import { buildStampSvg, renderStampToCanvasPng } from './stampUtils';
 import { TEPLOMASH_EMPLOYEES, TeplomashEmployee } from '../constants/teplomashEmployees';
 import { buildUpcA12Digits } from '../components/DocumentBarcode';
+import { sanitizeHtml } from './sanitizeUtils';
 // jsbarcode — статически, не lazy: DocumentBarcode.tsx (импортирован выше)
 // и так тянет его статическим import'ом, dynamic import() здесь ничего не
 // экономил (vite предупреждал про это при сборке), только усложнял код.
@@ -325,8 +326,8 @@ export const buildEmailHtmlWithCids = (
     fontFamily === 'Georgia' ? "Georgia, serif" : 
     fontFamily === 'Calibri' ? "Calibri, Arial, sans-serif" : "Arial, Helvetica, sans-serif";
 
-  // Format paragraph lines
-  let formattedContent = content || '<p>Текст обращения...</p>';
+  // Format paragraph lines (sanitized: контент письма — недоверенный ввод)
+  let formattedContent = sanitizeHtml(content) || '<p>Текст обращения...</p>';
   if (!formattedContent.includes('<p>') && !formattedContent.includes('<div')) {
     formattedContent = formattedContent
       .split('\n')

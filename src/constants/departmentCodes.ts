@@ -96,7 +96,80 @@ export interface RegisteredDocument {
   registeredAt: string; // ISO date timestamp
   registeredByRole: 'admin' | 'user';
   digitalSignatureKey?: string;
+  /** Hash-chain целостности реестра: хэш предыдущей записи (GENESIS для самой старой). */
+  prevHash?: string;
+  /** Hash-chain целостности реестра: FNV-1a 64 от канонической записи + prevHash. */
+  hash?: string;
 }
+
+/* =========================================================================
+   HASH-CHAIN ЦЕЛОСТНОСТИ РЕЕСТРА (tamper-evident журнал)
+   Паттерн из SINT: каждая запись хранит хэш предыдущей (prev_hash).
+   Любая правка записи в обход кода (devtools, ручной localStorage) ломает
+   цепочку — проверка verifyRegistryIntegrity() это обнаруживает.
+   Реестр хранится [новая ... старая]; цепочка строится от самой старой
+   (конец массива) к самой новой (начало).
+   ========================================================================= */
+
+const FNV_OFFSET_BASIS = 0xcbf29ce484222325n;
+const FNV_PRIME = 0x100000001b3n;
+
+/** FNV-1a 64-bit, hex-16. Синхронный, детерминированный, без WebCrypto. */
+export const fnv1a64Hex = (str: string): string => {
+  let hash = FNV_OFFSET_BASIS;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= BigInt(str.charCodeAt(i));
+    hash = (hash * FNV_PRIME) & 0xffffffffffffffffn;
+  }
+  return hash.toString(16).padStart(16, '0');
+};
+
+export const GENESIS_HASH = '0'.repeat(16);
+
+/** Каноническая сериализация записи БЕЗ hash/prevHash (стабильный порядок ключей). */
+const canonicalRegistryRecord = (doc: RegisteredDocument): string => {
+  const keys = Object.keys(doc).filter(k => k !== 'hash' && k !== 'prevHash').sort();
+  const record = doc as unknown as Record<string, unknown>;
+  const parts = keys.map(k => `${k}:${JSON.stringify(record[k])}`);
+  return parts.join('|');
+};
+
+/** Хэш одной записи: fnv1a64(канон + prevHash). */
+export const registryRecordHash = (doc: RegisteredDocument): string =>
+  fnv1a64Hex(canonicalRegistryRecord(doc) + ':' + (doc.prevHash || GENESIS_HASH));
+
+/** Перестроить цепочку от самой старой к самой новой. Возвращает новый массив. */
+export const rechainRegistry = (records: RegisteredDocument[]): RegisteredDocument[] => {
+  let prev = GENESIS_HASH;
+  const chained = records.map(doc => ({ ...doc }));
+  for (let i = chained.length - 1; i >= 0; i--) {
+    chained[i].prevHash = prev;
+    chained[i].hash = registryRecordHash(chained[i]);
+    prev = chained[i].hash!;
+  }
+  return chained;
+};
+
+/** Проверка целостности цепочки. valid=false → записи менялись в обход кода. */
+export const verifyRegistryIntegrity = (
+  records: RegisteredDocument[]
+): { valid: boolean; brokenAt: number; total: number; hasUnchained: boolean } => {
+  const total = records.length;
+  let prev = GENESIS_HASH;
+  let hasUnchained = false;
+  for (let i = total - 1; i >= 0; i--) {
+    const doc = records[i];
+    if (!doc.hash || !doc.prevHash) {
+      hasUnchained = true;
+      return { valid: false, brokenAt: i, total, hasUnchained };
+    }
+    if (doc.prevHash !== prev || registryRecordHash(doc) !== doc.hash) {
+      return { valid: false, brokenAt: i, total, hasUnchained };
+    }
+    prev = doc.hash;
+  }
+  return { valid: true, brokenAt: -1, total, hasUnchained };
+};
 
 export const getDefaultDeptCounters = (): DeptCounters => {
   return {
@@ -178,7 +251,15 @@ export const getDocumentRegistry = (): RegisteredDocument[] => {
   try {
     const saved = localStorage.getItem(DOC_REGISTRY_KEY);
     if (saved) {
-      return JSON.parse(saved);
+      const parsed = JSON.parse(saved);
+      // Миграция: если есть записи без hash (старый формат) — перестроить цепочку
+      const needsRechain = !Array.isArray(parsed) || parsed.some((r: RegisteredDocument) => !r.hash || !r.prevHash);
+      if (needsRechain) {
+        const chained = rechainRegistry(Array.isArray(parsed) ? parsed : []);
+        saveDocumentRegistry(chained);
+        return chained;
+      }
+      return parsed;
     }
   } catch (e) {
     console.error('Error loading document registry database', e);
@@ -188,7 +269,8 @@ export const getDocumentRegistry = (): RegisteredDocument[] => {
 
 export const saveDocumentRegistry = (list: RegisteredDocument[]): void => {
   try {
-    localStorage.setItem(DOC_REGISTRY_KEY, JSON.stringify(list));
+    // Все записи в реестр идут через hash-chain: пересобираем цепочку перед сохранением
+    localStorage.setItem(DOC_REGISTRY_KEY, JSON.stringify(rechainRegistry(list)));
   } catch (e) {
     console.error('Error saving document registry database', e);
   }

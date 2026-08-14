@@ -118,6 +118,10 @@ export interface RegisteredDocument {
   registeredAt: string;
   registeredByRole: 'admin' | 'user';
   digitalSignatureKey?: string;
+  /** Hash-chain целостности реестра: хэш предыдущей записи (GENESIS для самой старой). */
+  prevHash?: string;
+  /** Hash-chain целостности реестра: FNV-1a 64 от канонической записи + prevHash. */
+  hash?: string;
 }
 
 export interface DocumentPreset {
