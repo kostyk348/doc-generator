@@ -1,3 +1,6 @@
+import { activeRegistryStorage, activeCounterStorage } from '../services/registryStorage';
+import type { CounterState } from '../services/registryStorage';
+
 export interface DepartmentCodeInfo {
   name: string;
   code: string;
@@ -197,21 +200,17 @@ export const getDefaultDeptCounters = (): DeptCounters => {
 export const getDeptCounters = (): DeptCounters => {
   try {
     const todayStr = new Date().toLocaleDateString('ru-RU');
-    const savedDate = localStorage.getItem(DEPT_COUNTERS_DATE_KEY);
+    const state = activeCounterStorage.loadCounters();
 
     // DAILY COUNTER RESET: If a new calendar day has started, reset sequence counters back to 1
-    if (savedDate !== todayStr) {
+    if (!state || state.date !== todayStr) {
       const defaultCounters = getDefaultDeptCounters();
-      localStorage.setItem(DEPT_COUNTERS_KEY, JSON.stringify(defaultCounters));
-      localStorage.setItem(DEPT_COUNTERS_DATE_KEY, todayStr);
+      const nextState: CounterState = { counters: defaultCounters, date: todayStr };
+      activeCounterStorage.saveCounters(nextState);
       return defaultCounters;
     }
 
-    const saved = localStorage.getItem(DEPT_COUNTERS_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { ...getDefaultDeptCounters(), ...parsed };
-    }
+    return { ...getDefaultDeptCounters(), ...state.counters };
   } catch (e) {
     console.error('Error reading department counters', e);
   }
@@ -221,8 +220,7 @@ export const getDeptCounters = (): DeptCounters => {
 export const saveDeptCounters = (counters: DeptCounters): void => {
   try {
     const todayStr = new Date().toLocaleDateString('ru-RU');
-    localStorage.setItem(DEPT_COUNTERS_KEY, JSON.stringify(counters));
-    localStorage.setItem(DEPT_COUNTERS_DATE_KEY, todayStr);
+    activeCounterStorage.saveCounters({ counters, date: todayStr });
   } catch (e) {
     console.error('Error saving department counters', e);
   }
@@ -275,30 +273,27 @@ const wasHashedWithLegacyCanon = (doc: RegisteredDocument): boolean => {
 
 export const getDocumentRegistry = (): RegisteredDocument[] => {
   try {
-    const saved = localStorage.getItem(DOC_REGISTRY_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (!Array.isArray(parsed)) return [];
-      // Миграция: если есть записи без hash (старый формат) — перестроить цепочку
-      const needsRechain = parsed.some((r: RegisteredDocument) => !r.hash || !r.prevHash);
-      if (needsRechain) {
+    const parsed = activeRegistryStorage.loadRegistry();
+    if (!Array.isArray(parsed)) return [];
+    // Миграция: если есть записи без hash (старый формат) — перестроить цепочку
+    const needsRechain = parsed.some((r: RegisteredDocument) => !r.hash || !r.prevHash);
+    if (needsRechain) {
+      const chained = rechainRegistry(parsed);
+      saveDocumentRegistry(chained);
+      return chained;
+    }
+    // Миграция бага undefined-полей: все записи цепочки валидны только по
+    // старому канону → сломаны самим приложением, а не ручной правкой → пересобрать.
+    const verdict = verifyRegistryIntegrity(parsed);
+    if (!verdict.valid) {
+      const allBrokenByLegacy = parsed.every(doc => wasHashedWithLegacyCanon(doc));
+      if (allBrokenByLegacy) {
         const chained = rechainRegistry(parsed);
         saveDocumentRegistry(chained);
         return chained;
       }
-      // Миграция бага undefined-полей: все записи цепочки валидны только по
-      // старому канону → сломаны самим приложением, а не ручной правкой → пересобрать.
-      const verdict = verifyRegistryIntegrity(parsed);
-      if (!verdict.valid) {
-        const allBrokenByLegacy = parsed.every(doc => wasHashedWithLegacyCanon(doc));
-        if (allBrokenByLegacy) {
-          const chained = rechainRegistry(parsed);
-          saveDocumentRegistry(chained);
-          return chained;
-        }
-      }
-      return parsed;
     }
+    return parsed;
   } catch (e) {
     console.error('Error loading document registry database', e);
   }
@@ -308,7 +303,7 @@ export const getDocumentRegistry = (): RegisteredDocument[] => {
 export const saveDocumentRegistry = (list: RegisteredDocument[]): void => {
   try {
     // Все записи в реестр идут через hash-chain: пересобираем цепочку перед сохранением
-    localStorage.setItem(DOC_REGISTRY_KEY, JSON.stringify(rechainRegistry(list)));
+    activeRegistryStorage.saveRegistry(rechainRegistry(list));
   } catch (e) {
     console.error('Error saving document registry database', e);
   }
@@ -393,7 +388,7 @@ export const deleteRegisteredDocumentFromDb = (id: string): void => {
 };
 
 export const clearDocumentRegistryDb = (): void => {
-  localStorage.removeItem(DOC_REGISTRY_KEY);
+  activeRegistryStorage.clearRegistry();
 };
 
 /**
