@@ -1,5 +1,9 @@
 # Генератор Документов на Бланке (ГОСТ Р 7.0.97–2025)
 
+[![CI](https://github.com/kostyk348/doc-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/doc-generator/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](https://nodejs.org/)
+
 Офлайн-генератор официальных документов: исходящие письма, служебные записки и бланки по ГОСТ, с автозаполнением реквизитов, склонением ФИО и должностей, единым реестром исходящих и экспортом в PDF/.eml/.doc.
 
 Работает в двух режимах:
@@ -152,4 +156,5 @@ vite.config.ts                   — base '/docgen/' (контракт веб-д
 
 ## Лицензия
 
+Проприетарная (внутренняя) — см. [LICENSE](LICENSE).
 © Внутреннее ПО, не для публичного распространения.

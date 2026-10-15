@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, prod]
+  pull_request:
+    branches: [main, master, prod]
+  workflow_dispatch:
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Установка зависимостей
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Проверка типов (tsc --noEmit)
+        run: npm run lint
+
+      - name: Тесты (vitest run)
+        run: npm test
