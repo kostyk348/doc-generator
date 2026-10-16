@@ -3,6 +3,8 @@
 [![CI](https://github.com/kostyk348/doc-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/doc-generator/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](https://nodejs.org/)
+[![Release](https://img.shields.io/github/v/release/kostyk348/doc-generator?sort=semver&color=blue)](https://github.com/kostyk348/doc-generator/releases)
+[![Last commit](https://img.shields.io/github/last-commit/kostyk348/doc-generator?branch=main)](https://github.com/kostyk348/doc-generator/commits/main)
 
 Офлайн-генератор официальных документов: исходящие письма, служебные записки и бланки по ГОСТ, с автозаполнением реквизитов, склонением ФИО и должностей, единым реестром исходящих и экспортом в PDF/.eml/.doc.
 
