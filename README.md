@@ -1,4 +1,10 @@
+<div align="center">
+
+<img src="docs/banner.svg" alt="doc-generator banner" width="1000">
+
 # Генератор Документов на Бланке (ГОСТ Р 7.0.97–2025)
+
+### Офлайн-генератор официальных документов: исходящие письма, служебные записки и бланки по ГОСТ, с автозаполнением реквизитов, склонением ФИО и должностей,…
 
 [![CI](https://github.com/kostyk348/doc-generator/actions/workflows/ci.yml/badge.svg)](https://github.com/kostyk348/doc-generator/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-Proprietary-lightgrey.svg)](LICENSE)
@@ -6,7 +12,10 @@
 [![Release](https://img.shields.io/github/v/release/kostyk348/doc-generator?sort=semver&color=blue)](https://github.com/kostyk348/doc-generator/releases)
 [![Last commit](https://img.shields.io/github/last-commit/kostyk348/doc-generator?branch=main)](https://github.com/kostyk348/doc-generator/commits/main)
 
-Офлайн-генератор официальных документов: исходящие письма, служебные записки и бланки по ГОСТ, с автозаполнением реквизитов, склонением ФИО и должностей, единым реестром исходящих и экспортом в PDF/.eml/.doc.
+</div>
+
+---
+
 
 Работает в двух режимах:
 - **Web-сервис** на внутреннем портале tmdata (микросервис, раздаётся под префиксом `/docgen/`)
